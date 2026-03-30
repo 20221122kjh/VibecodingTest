@@ -112,6 +112,75 @@
         .blink-text {
             animation: blink 1s steps(1, end) infinite;
         }
+        #dodgePrompt {
+            position: absolute;
+            left: 50%;
+            top: 28%;
+            transform: translate(-50%, -50%);
+            padding: 14px 18px;
+            border: 3px solid #fff;
+            background: rgba(0, 0, 0, 0.78);
+            text-align: center;
+            line-height: 1.5;
+            display: none;
+            z-index: 20;
+            animation: tutorialPulse 0.35s steps(2, end) infinite;
+        }
+        #dodgePrompt strong {
+            color: #fff;
+        }
+        #dodgePrompt,
+        #attackPrompt {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 13px;
+            color: #fff;
+            text-shadow: none;
+        }
+        .tutorial-keys {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            vertical-align: middle;
+        }
+        .tutorial-key {
+            display: inline-block;
+            position: relative;
+            width: 26px;
+            height: 26px;
+            border: 2px solid #fff;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.12);
+            box-sizing: border-box;
+            font-size: 0;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .tutorial-key::before {
+            content: attr(data-key);
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 14px;
+            line-height: 1;
+            font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', sans-serif;
+            font-weight: 700;
+        }
+        #attackPrompt {
+            position: absolute;
+            left: 50%;
+            bottom: 8%;
+            transform: translateX(-50%);
+            text-align: center;
+            line-height: 1.4;
+            display: none;
+            z-index: 20;
+        }
+        @keyframes tutorialPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.55; }
+        }
         @keyframes blink {
             0%, 49% { opacity: 1; }
             50%, 100% { opacity: 0.2; }
@@ -123,6 +192,18 @@
     <div class="flex flex-col items-center">
         <div class="relative">
             <canvas id="gameCanvas" width="800" height="400"></canvas>
+            <div id="dodgePrompt" aria-live="polite">
+                <div><strong>회피!</strong> 피격 직전입니다</div>
+                <div>
+                    <span class="tutorial-keys" aria-hidden="true">
+                        <span class="tutorial-key" data-key="↑"></span>
+                        <span class="tutorial-key" data-key="←"></span>
+                        <span class="tutorial-key" data-key="↓"></span>
+                    </span>
+                    중 하나를 누르세요
+                </div>
+            </div>
+            <div id="attackPrompt" class="blink-text" aria-live="polite"><span class="tutorial-key" data-key="→" aria-hidden="true"></span>를 눌러 공격하세요!</div>
             <div id="overlay" class="absolute inset-0 bg-black flex flex-col items-center justify-center p-6 text-center">
                 <h1 id="main-title" class="text-3xl mb-4">TIMING KNIGHT</h1>
                 <div class="controls-guide">
@@ -156,6 +237,8 @@
         const ctx = canvas.getContext('2d');
         const overlay = document.getElementById('overlay');
         const subTitleEl = document.getElementById('sub-title');
+        const dodgePromptEl = document.getElementById('dodgePrompt');
+        const attackPromptEl = document.getElementById('attackPrompt');
         let audioCtx = null;
 
         function getAudioContext() {
@@ -230,10 +313,28 @@
             mode: 'START', 
             stage: 1,
             shake: 0,
+            timeScale: 1,
+            cameraZoom: 1,
+            cameraTargetZoom: 1,
+            cameraFocusX: canvas.width / 2,
+            cameraFocusY: canvas.height / 2,
+            cameraTargetFocusX: canvas.width / 2,
+            cameraTargetFocusY: canvas.height / 2,
             nextStageTimer: 0,
             particles: [],
             afterimages: [],
-            attackMarkers: []
+            attackMarkers: [],
+            tutorial: {
+                hasPlayedOnce: false,
+                hasTriggeredFirstAttackCue: false,
+                isCinematicActive: false,
+                phase: 'OFF',
+                slowFrames: 0,
+                hasCompletedFirstDodge: false,
+                attackHintShown: false,
+                attackedSinceTutorialEnd: false,
+                attackHintFrames: 0
+            }
         };
 
         const player = {
@@ -280,7 +381,40 @@
             if (state.mode === 'PLAY') {
                 if (player.status !== 'IDLE') return;
 
+                const isArrowInput = ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(key);
+                const isStage1BeforeTutorialFreeze = (
+                    state.stage === 1 &&
+                    (!state.tutorial.hasTriggeredFirstAttackCue ||
+                     (state.tutorial.isCinematicActive && state.tutorial.phase !== 'FROZEN'))
+                );
+                if (isStage1BeforeTutorialFreeze && isArrowInput) {
+                    return;
+                }
+
+                if (state.stage === 1 && !state.tutorial.hasCompletedFirstDodge && key === 'ArrowRight') {
+                    return;
+                }
+
+                if (state.tutorial.isCinematicActive && key === 'ArrowRight') {
+                    return;
+                }
+
+                const isStage1PreHitLock = (
+                    state.stage === 1 &&
+                    enemy.status === 'ATTACKING' &&
+                    ((enemy.maxAttackTimer - enemy.timer) / enemy.maxAttackTimer) >= 0.25
+                );
+                if (isStage1PreHitLock && key === 'ArrowRight') {
+                    return;
+                }
+
                 if (key === 'ArrowRight') {
+                    if (state.stage === 1 && state.tutorial.hasCompletedFirstDodge) {
+                        state.tutorial.attackedSinceTutorialEnd = true;
+                        state.tutorial.attackHintShown = true;
+                        state.tutorial.attackHintFrames = 0;
+                        attackPromptEl.style.display = 'none';
+                    }
                     player.status = 'ATTACK';
                     player.timer = player.maxAttackTimer;
                     setTimeout(() => checkHit(), 100); 
@@ -292,21 +426,43 @@
                     player.timer = player.maxDodgeTimer;
                     player.isDodging = true;
                     player.dodgeCooldown = player.maxDodgeCooldown;
+                    if (state.tutorial.isCinematicActive) releaseDodgeTutorialCue();
                 }
             }
         });
 
         function startGame() {
+            const showTutorialThisRun = !state.tutorial.hasPlayedOnce;
+            state.tutorial.hasPlayedOnce = true;
+
             state.mode = 'PLAY';
             state.stage = 1;
+            state.timeScale = 1;
+            state.cameraZoom = 1;
+            state.cameraTargetZoom = 1;
+            state.cameraFocusX = canvas.width / 2;
+            state.cameraFocusY = canvas.height / 2;
+            state.cameraTargetFocusX = canvas.width / 2;
+            state.cameraTargetFocusY = canvas.height / 2;
             state.particles = [];
             state.afterimages = [];
             state.attackMarkers = [];
+            state.tutorial.hasTriggeredFirstAttackCue = !showTutorialThisRun;
+            state.tutorial.isCinematicActive = false;
+            state.tutorial.phase = 'OFF';
+            state.tutorial.slowFrames = 0;
+            state.tutorial.hasCompletedFirstDodge = !showTutorialThisRun;
+            state.tutorial.attackHintShown = !showTutorialThisRun;
+            state.tutorial.attackedSinceTutorialEnd = false;
+            state.tutorial.attackHintFrames = 0;
+            dodgePromptEl.style.display = 'none';
+            attackPromptEl.style.display = 'none';
             player.hp = 100;
             player.dodgeCooldown = 0;
             player.x = player.originX;
             player.y = player.originY;
             resetEnemy();
+            enemy.idleTimer = 1;
             document.getElementById('main-title').innerText = "TIMING KNIGHT";
             setSubTitle("PRESS SPACE TO START", true);
             overlay.style.display = 'none';
@@ -324,6 +480,62 @@
             enemy.hasDealtDamage = false;
             enemy.hitFlash = 0;
             state.nextStageTimer = 0;
+
+            if (state.stage !== 1) {
+                state.tutorial.hasTriggeredFirstAttackCue = true;
+                state.tutorial.isCinematicActive = false;
+                state.tutorial.phase = 'OFF';
+                state.tutorial.slowFrames = 0;
+                state.tutorial.hasCompletedFirstDodge = true;
+                state.tutorial.attackHintShown = true;
+                state.tutorial.attackedSinceTutorialEnd = false;
+                state.tutorial.attackHintFrames = 0;
+                state.timeScale = 1;
+                state.cameraTargetZoom = 1;
+                state.cameraTargetFocusX = canvas.width / 2;
+                state.cameraTargetFocusY = canvas.height / 2;
+                dodgePromptEl.style.display = 'none';
+                attackPromptEl.style.display = 'none';
+            }
+        }
+
+        function triggerDodgeTutorialCue() {
+            state.tutorial.hasTriggeredFirstAttackCue = true;
+            state.tutorial.isCinematicActive = true;
+            state.tutorial.phase = 'SLOW';
+            state.tutorial.slowFrames = 8;
+            state.timeScale = 0.03;
+            state.cameraTargetZoom = 1;
+            state.cameraTargetFocusX = canvas.width / 2;
+            state.cameraTargetFocusY = canvas.height / 2;
+            dodgePromptEl.style.display = 'block';
+        }
+
+        function releaseDodgeTutorialCue() {
+            state.tutorial.isCinematicActive = false;
+            state.tutorial.phase = 'OFF';
+            state.tutorial.slowFrames = 0;
+            state.tutorial.hasCompletedFirstDodge = true;
+            state.tutorial.attackHintShown = false;
+            state.tutorial.attackedSinceTutorialEnd = false;
+            state.tutorial.attackHintFrames = 0;
+            state.timeScale = 1;
+            state.cameraTargetZoom = 1;
+            state.cameraTargetFocusX = canvas.width / 2;
+            state.cameraTargetFocusY = canvas.height / 2;
+            dodgePromptEl.style.display = 'none';
+
+            // After tutorial dodge input, move quickly into the actual strike so the dodge feels meaningful.
+            if (state.stage === 1) {
+                if (enemy.status === 'PREPARING') {
+                    enemy.status = 'HOLD';
+                    enemy.x = enemy.prepX;
+                    enemy.y = enemy.prepY;
+                    enemy.timer = 8;
+                } else if (enemy.status === 'HOLD') {
+                    enemy.timer = Math.min(enemy.timer, 8);
+                }
+            }
         }
 
         function createHitEffect(x, y) {
@@ -384,37 +596,70 @@
         }
 
         function update() {
-            if (player.dodgeCooldown > 0) player.dodgeCooldown--;
-            if (enemy.hitFlash > 0) enemy.hitFlash--;
+            if (state.tutorial.isCinematicActive && state.tutorial.phase === 'SLOW') {
+                state.tutorial.slowFrames--;
+                if (state.tutorial.slowFrames <= 0) {
+                    state.tutorial.phase = 'FROZEN';
+                    state.timeScale = 0;
+                }
+            }
+
+            const dt = state.timeScale;
+            if (player.dodgeCooldown > 0) player.dodgeCooldown = Math.max(0, player.dodgeCooldown - dt);
+            if (enemy.hitFlash > 0) enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
+
+            if (
+                state.stage === 1 &&
+                state.tutorial.hasCompletedFirstDodge &&
+                !state.tutorial.attackedSinceTutorialEnd &&
+                !state.tutorial.attackHintShown
+            ) {
+                state.tutorial.attackHintFrames++;
+                if (state.tutorial.attackHintFrames >= 300) {
+                    state.tutorial.attackHintShown = true;
+                    attackPromptEl.style.display = 'block';
+                }
+            }
+
+            const zoomLerp = state.tutorial.isCinematicActive ? 0.42 : 0.12;
+            const focusLerp = state.tutorial.isCinematicActive ? 0.3 : 0.1;
+            state.cameraZoom += (state.cameraTargetZoom - state.cameraZoom) * zoomLerp;
+            state.cameraFocusX += (state.cameraTargetFocusX - state.cameraFocusX) * focusLerp;
+            state.cameraFocusY += (state.cameraTargetFocusY - state.cameraFocusY) * focusLerp;
+
+            const halfViewW = canvas.width / (2 * state.cameraZoom);
+            const halfViewH = canvas.height / (2 * state.cameraZoom);
+            state.cameraFocusX = Math.max(halfViewW, Math.min(canvas.width - halfViewW, state.cameraFocusX));
+            state.cameraFocusY = Math.max(halfViewH, Math.min(canvas.height - halfViewH, state.cameraFocusY));
 
             for (let i = state.particles.length - 1; i >= 0; i--) {
                 const p = state.particles[i];
                 if (p.isRing) {
-                    p.size += 15;
-                    p.life -= 0.1;
+                    p.size += 15 * dt;
+                    p.life -= 0.1 * dt;
                 } else {
-                    p.x += p.vx; 
-                    p.y += p.vy; 
-                    if (p.gravity) p.vy += p.gravity;
-                    p.life -= 0.03;
+                    p.x += p.vx * dt; 
+                    p.y += p.vy * dt; 
+                    if (p.gravity) p.vy += p.gravity * dt;
+                    p.life -= 0.03 * dt;
                 }
                 if (p.life <= 0) state.particles.splice(i, 1);
             }
 
             for (let i = state.afterimages.length - 1; i >= 0; i--) {
                 const img = state.afterimages[i];
-                img.life -= 0.08;
+                img.life -= 0.08 * dt;
                 if (img.life <= 0) state.afterimages.splice(i, 1);
             }
 
             for (let i = state.attackMarkers.length - 1; i >= 0; i--) {
                 const marker = state.attackMarkers[i];
-                marker.alpha -= 0.02;
+                marker.alpha -= 0.02 * dt;
                 if (marker.alpha <= 0) state.attackMarkers.splice(i, 1);
             }
 
             if (state.nextStageTimer > 0) {
-                state.nextStageTimer--;
+                state.nextStageTimer -= dt;
                 if (state.nextStageTimer <= 0) {
                     if (state.stage >= GAME_CONFIG.TOTAL_STAGES) {
                         gameClear();
@@ -426,7 +671,7 @@
             }
 
             if (player.timer > 0) {
-                player.timer--;
+                player.timer -= dt;
                 if (player.status.startsWith('DODGE') && player.timer % 4 === 0) {
                     addAfterimage(player.x, player.y, player.status);
                 }
@@ -454,14 +699,18 @@
             if (enemy.hp > 0) {
                 if (enemy.status === 'IDLE') {
                     if (state.nextStageTimer === 0) {
-                        enemy.idleTimer--;
+                        enemy.idleTimer -= dt;
                         if (enemy.idleTimer <= 0) {
                             enemy.status = 'PREPARING';
                             enemy.timer = enemy.maxPreparingTimer; 
                             enemy.hasDealtDamage = false;
                             
-                            const patterns = ['MID', 'AIR_STRAIGHT', 'AIR_DIVE', 'GROUND_STRAIGHT', 'GROUND_UPPER', 'LONG'];
-                            enemy.attackDir = patterns[Math.floor(Math.random() * patterns.length)];
+                            if (state.stage === 1) {
+                                enemy.attackDir = 'MID';
+                            } else {
+                                const patterns = ['MID', 'AIR_STRAIGHT', 'AIR_DIVE', 'GROUND_STRAIGHT', 'GROUND_UPPER', 'LONG'];
+                                enemy.attackDir = patterns[Math.floor(Math.random() * patterns.length)];
+                            }
 
                             if (enemy.attackDir.startsWith('AIR')) {
                                 enemy.prepX = enemy.originX + 70;
@@ -476,18 +725,29 @@
                         }
                     }
                 } else if (enemy.status === 'PREPARING') {
-                    enemy.timer--;
+                    enemy.timer -= dt;
                     const progress = (enemy.maxPreparingTimer - enemy.timer) / enemy.maxPreparingTimer;
                     enemy.x = enemy.originX + (enemy.prepX - enemy.originX) * progress;
                     enemy.y = enemy.originY + (enemy.prepY - enemy.originY) * progress;
+
                     if (enemy.timer <= 0) {
                         enemy.status = 'HOLD'; 
                         enemy.timer = enemy.maxHoldTimer;
                     }
                 } else if (enemy.status === 'HOLD') {
-                    enemy.timer--;
+                    enemy.timer -= dt;
                     enemy.x = enemy.prepX;
                     enemy.y = enemy.prepY;
+
+                    if (
+                        state.stage === 1 &&
+                        !state.tutorial.hasTriggeredFirstAttackCue &&
+                        enemy.timer <= 3 &&
+                        enemy.timer > 0
+                    ) {
+                        triggerDodgeTutorialCue();
+                    }
+
                     if (enemy.timer <= 0) {
                         enemy.status = 'ATTACKING';
                         enemy.timer = enemy.maxAttackTimer;
@@ -502,10 +762,11 @@
                         }
                     }
                 } else if (enemy.status === 'ATTACKING') {
-                    enemy.timer--;
+                    enemy.timer -= dt;
                     const progress = (enemy.maxAttackTimer - enemy.timer) / enemy.maxAttackTimer;
                     const startX = enemy.prepX;
                     const startY = enemy.prepY;
+                    let didTriggerTutorialThisFrame = false;
                     
                     let targetX = player.originX - 40;
                     let targetY = player.originY;
@@ -520,7 +781,13 @@
                     enemy.x = startX - movement * (startX - targetX);
                     enemy.y = startY - movement * (startY - targetY);
 
-                    if (!enemy.hasDealtDamage && progress > 0.4 && progress < 0.6) {
+                    if (
+                        !didTriggerTutorialThisFrame &&
+                        !state.tutorial.isCinematicActive &&
+                        !enemy.hasDealtDamage &&
+                        progress > 0.4 &&
+                        progress < 0.6
+                    ) {
                         let dodged = false;
                         
                         // 공통: 뒤로 회피(DODGE_BACK) 중이면 모든 대각선/직선 공격 회피 가능
@@ -565,6 +832,7 @@
 
         function gameOver() {
             state.mode = 'GAMEOVER';
+            attackPromptEl.style.display = 'none';
             overlay.style.display = 'flex';
             document.getElementById('main-title').innerText = "GAME OVER";
             setSubTitle(`STAGE ${state.stage} FAILED. PRESS SPACE TO RESTART`);
@@ -572,45 +840,25 @@
 
         function gameClear() {
             state.mode = 'CLEAR';
+            attackPromptEl.style.display = 'none';
             overlay.style.display = 'flex';
             document.getElementById('main-title').innerText = "STAGE CLEAR!";
             setSubTitle(`ALL ${GAME_CONFIG.TOTAL_STAGES} STAGES CLEARED | PRESS SPACE TO RESTART`);
         }
 
         function drawPixelSprite(ctx, x, y, size, status, customAlpha = 1.0) {
-            const pixelSize = size / 16; 
-            const ox = x - size / 2;
-            const oy = y - size;
-            const spriteMap = [
-                [0,0,0,0,0,0,4,4,4,4,0,0,0,0,0,0], [0,0,0,0,0,1,4,4,4,4,1,0,0,0,0,0],
-                [0,0,0,0,1,2,2,2,2,2,2,1,0,0,0,0], [0,0,0,1,2,2,3,3,3,3,2,2,1,0,0,0],
-                [0,0,0,1,2,3,1,1,1,1,3,2,1,0,0,0], [0,0,1,2,2,3,1,2,2,1,3,2,2,1,0,0],
-                [0,0,1,2,2,3,1,1,1,1,3,2,2,1,0,0], [0,0,1,2,2,2,3,3,3,3,2,2,2,1,0,0],
-                [0,1,1,2,2,2,2,2,2,2,2,2,2,1,1,0], [0,1,2,2,2,1,2,2,2,1,2,2,2,2,1,0],
-                [0,1,2,2,2,1,2,2,2,1,2,2,2,2,1,0], [0,1,2,2,2,2,2,2,2,2,2,2,2,2,1,0],
-                [0,0,1,2,2,2,2,2,2,2,2,2,2,1,0,0], [0,0,0,1,2,2,2,1,1,2,2,2,1,0,0,0],
-                [0,0,0,1,2,2,1,0,0,1,2,2,1,0,0,0], [0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0]
-            ];
             ctx.globalAlpha = customAlpha;
             const isCooldown = player.dodgeCooldown > 0 && player.status === 'IDLE';
-            const knightMetalDark = '#58636f';
-            const knightMetalLight = '#b8c2cf';
-            const knightCloth = '#8e2f3f';
-            for (let row = 0; row < 16; row++) {
-                for (let col = 0; col < 16; col++) {
-                    const val = spriteMap[row][col];
-                    if (val === 0) continue;
-                    if (status === 'HIT') ctx.fillStyle = '#ffffff'; 
-                    else if (isCooldown && val !== 1) ctx.fillStyle = PALETTE.COOLDOWN; 
-                    else {
-                        if (val === 1) ctx.fillStyle = PALETTE.DARK;
-                        else if (val === 2) ctx.fillStyle = knightMetalDark;
-                        else if (val === 3) ctx.fillStyle = knightMetalLight;
-                        else if (val === 4) ctx.fillStyle = knightCloth;
-                    }
-                    ctx.fillRect(ox + col * pixelSize, oy + row * pixelSize, pixelSize + 0.2, pixelSize + 0.2);
-                }
-            }
+            const bodySize = size * 0.78;
+            const ox = x - bodySize / 2;
+            const oy = y - bodySize;
+            if (status === 'HIT') ctx.fillStyle = '#ffffff';
+            else if (isCooldown) ctx.fillStyle = '#2c3e50';
+            else ctx.fillStyle = '#2d7ff9';
+            ctx.fillRect(ox, oy, bodySize, bodySize);
+            ctx.strokeStyle = '#d6e8ff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(ox, oy, bodySize, bodySize);
             ctx.globalAlpha = 1.0;
         }
 
@@ -668,6 +916,9 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.scale(state.cameraZoom, state.cameraZoom);
+            ctx.translate(-state.cameraFocusX, -state.cameraFocusY);
             if (state.shake > 0.5) ctx.translate(Math.random() * state.shake - state.shake/2, Math.random() * state.shake - state.shake/2);
             ctx.fillStyle = PALETTE.DARK; ctx.fillRect(0, 300, canvas.width, 100);
             ctx.fillStyle = PALETTE.DARK; ctx.font = '10px "Press Start 2P"'; ctx.fillText(`STAGE ${state.stage}/${GAME_CONFIG.TOTAL_STAGES}`, 20, 30);
