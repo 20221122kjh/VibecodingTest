@@ -177,6 +177,161 @@
             display: none;
             z-index: 20;
         }
+        #overlay {
+            z-index: 30;
+        }
+        .lobby-panel {
+            width: 100%;
+            max-width: 740px;
+            padding: 18px 20px;
+            color: #071004;
+            background: #87a06f;
+            border: 4px solid #000;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-sizing: border-box;
+        }
+        .lobby-screen {
+            width: 800px;
+            min-height: 400px;
+            padding: 18px;
+            border: 4px solid #444;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background: #87a06f;
+            display: none;
+            box-sizing: border-box;
+        }
+        .lobby-icons {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+        }
+        .lobby-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .icon-frame {
+            width: 110px;
+            height: 110px;
+            border: 6px solid #000;
+            background: #8ea878;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pixel-icon {
+            width: 76px;
+            height: 76px;
+            image-rendering: pixelated;
+        }
+        .upgrade-btn {
+            width: 100%;
+            max-width: 200px;
+            border: 3px solid #000;
+            background: #d6e1c9;
+            color: #000;
+            padding: 8px 6px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 8px;
+            cursor: pointer;
+            line-height: 1.4;
+        }
+        .upgrade-btn:active {
+            transform: translateY(1px);
+        }
+        .upgrade-btn:disabled {
+            background: #9aa78e;
+            color: #33402e;
+            border-color: #33402e;
+            cursor: not-allowed;
+        }
+        .lobby-card-stat {
+            font-size: 8px;
+            color: #0f2107;
+            text-align: center;
+            line-height: 1.4;
+            min-height: 26px;
+        }
+        .lobby-meta {
+            border-top: 3px solid #000;
+            padding-top: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            text-align: center;
+            font-size: 9px;
+        }
+        .lobby-notice {
+            color: #7b1208;
+            min-height: 12px;
+        }
+        .lobby-notice.notice-bounce {
+            animation: noticeBounce 0.34s ease-in-out;
+        }
+        .lobby-card-stat.stat-bounce {
+            animation: noticeBounce 0.34s ease-in-out;
+        }
+        .pause-panel {
+            display: none;
+            width: min(420px, 92%);
+            border: 4px solid #ffffff;
+            background: rgba(0, 0, 0, 0.88);
+            padding: 18px 14px;
+            color: #ffffff;
+            text-align: center;
+            box-sizing: border-box;
+        }
+        .pause-title {
+            font-size: 16px;
+            margin-bottom: 14px;
+        }
+        .pause-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+        }
+        .pause-btn {
+            width: min(280px, 100%);
+            border: 3px solid #ffffff;
+            background: #1a2c11;
+            color: #ffffff;
+            padding: 10px 8px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 8px;
+            cursor: pointer;
+        }
+        .pause-btn:active {
+            transform: translateY(1px);
+        }
+        .pause-hint {
+            margin-top: 10px;
+            font-size: 8px;
+            color: #c6c6c6;
+        }
+        @media (max-width: 760px) {
+            .lobby-screen {
+                width: 100%;
+                min-height: auto;
+                padding: 10px;
+            }
+            .lobby-panel {
+                padding: 12px 10px;
+            }
+            .lobby-icons {
+                flex-direction: column;
+                align-items: center;
+            }
+            .lobby-card {
+                width: 100%;
+                max-width: 260px;
+            }
+        }
         @keyframes tutorialPulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.55; }
@@ -185,12 +340,19 @@
             0%, 49% { opacity: 1; }
             50%, 100% { opacity: 0.2; }
         }
+        @keyframes noticeBounce {
+            0% { transform: translateY(0); }
+            25% { transform: translateY(-3px); }
+            50% { transform: translateY(2px); }
+            75% { transform: translateY(-2px); }
+            100% { transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
 
     <div class="flex flex-col items-center">
-        <div class="relative">
+        <div id="battleScreen" class="relative">
             <canvas id="gameCanvas" width="800" height="400"></canvas>
             <div id="dodgePrompt" aria-live="polite">
                 <div><strong>회피!</strong> 피격 직전입니다</div>
@@ -205,41 +367,164 @@
             </div>
             <div id="attackPrompt" class="blink-text" aria-live="polite"><span class="tutorial-key" data-key="→" aria-hidden="true"></span>를 눌러 공격하세요!</div>
             <div id="overlay" class="absolute inset-0 bg-black flex flex-col items-center justify-center p-6 text-center">
-                <h1 id="main-title" class="text-3xl mb-4">TIMING KNIGHT</h1>
-                <div class="controls-guide">
-                    <div class="control-legend">
-                        <span class="control-item">
-                            <div class="dodge-keys" aria-hidden="true">
-                                <span class="key up" data-key="↑"></span>
-                                <span class="key left" data-key="←"></span>
-                                <span class="key down" data-key="↓"></span>
-                            </div>
-                            <span class="control-label">DODGE</span>
-                        </span>
-                        <span class="control-separator" aria-hidden="true"></span>
-                        <span class="control-item">
-                            <span class="key" data-key="→"></span>
-                            <span class="control-label">ATTACK</span>
-                        </span>
+                <div id="introPanel">
+                    <h1 id="main-title" class="text-3xl mb-4">TIMING KNIGHT</h1>
+                    <p id="sub-title" class="text-[10px] text-gray-400 mt-6 blink-text">PRESS SPACE TO START</p>
+                </div>
+                <div id="pausePanel" class="pause-panel" aria-live="polite">
+                    <h2 class="pause-title">PAUSED</h2>
+                    <div class="pause-actions">
+                        <button id="pauseContinueBtn" class="pause-btn" type="button">CONTINUE</button>
+                        <button id="pauseLobbyBtn" class="pause-btn" type="button">RETURN TO LOBBY</button>
+                    </div>
+                    <p class="pause-hint">ESC: CONTINUE</p>
+                </div>
+            </div>
+        </div>
+        <div id="lobbyScreen" class="lobby-screen">
+            <div id="lobbyPanel" class="lobby-panel" aria-live="polite">
+                <div class="lobby-icons">
+                    <div class="lobby-card">
+                        <div class="icon-frame"><canvas id="iconSword" class="pixel-icon" width="16" height="16"></canvas></div>
+                        <button id="upgradeAtkBtn" class="upgrade-btn" type="button">[1] ATK UPGRADE</button>
+                        <p id="atkCardStat" class="lobby-card-stat">ATK</p>
+                    </div>
+                    <div class="lobby-card">
+                        <div class="icon-frame"><canvas id="iconHeart" class="pixel-icon" width="16" height="16"></canvas></div>
+                        <button id="upgradeHpBtn" class="upgrade-btn" type="button">[2] HP UPGRADE</button>
+                        <p id="hpCardStat" class="lobby-card-stat">HP</p>
+                    </div>
+                    <div class="lobby-card">
+                        <div class="icon-frame"><canvas id="iconShield" class="pixel-icon" width="16" height="16"></canvas></div>
+                        <button id="upgradeDefBtn" class="upgrade-btn" type="button">[3] DEF UPGRADE</button>
+                        <p id="defCardStat" class="lobby-card-stat">DEF</p>
                     </div>
                 </div>
-                <p id="sub-title" class="text-[10px] text-gray-400 mt-6 blink-text">PRESS SPACE TO START</p>
+                <div class="lobby-meta">
+                    <p id="lobbyGoldLine">GOLD: 0</p>
+                    <p id="lobbyStatLine">HP 100 | ATK 25 | DEF 0</p>
+                    <p id="lobbyNoticeLine" class="lobby-notice"></p>
+                    <p>SPACE: START STAGE</p>
+                </div>
             </div>
         </div>
         <div class="controls-guide">
-            [→] 공격 | [↑][←][↓] 회피<br>
-            목표: 총 5개 스테이지를 클리어하세요.
+            로비: [1][2][3] 업그레이드, [SPACE] 시작 | 전투: [→] 공격, [↑][←][↓] 회피<br>
+            목표: 스테이지를 클리어해 골드를 모으고 로비에서 성장하세요.
         </div>
     </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const battleScreenEl = document.getElementById('battleScreen');
+        const lobbyScreenEl = document.getElementById('lobbyScreen');
         const overlay = document.getElementById('overlay');
+        const introPanelEl = document.getElementById('introPanel');
+        const pausePanelEl = document.getElementById('pausePanel');
+        const pauseContinueBtnEl = document.getElementById('pauseContinueBtn');
+        const pauseLobbyBtnEl = document.getElementById('pauseLobbyBtn');
         const subTitleEl = document.getElementById('sub-title');
+        const lobbyPanelEl = document.getElementById('lobbyPanel');
+        const lobbyGoldLineEl = document.getElementById('lobbyGoldLine');
+        const lobbyStatLineEl = document.getElementById('lobbyStatLine');
+        const lobbyNoticeLineEl = document.getElementById('lobbyNoticeLine');
+        const hpCardStatEl = document.getElementById('hpCardStat');
+        const atkCardStatEl = document.getElementById('atkCardStat');
+        const defCardStatEl = document.getElementById('defCardStat');
+        const upgradeHpBtnEl = document.getElementById('upgradeHpBtn');
+        const upgradeAtkBtnEl = document.getElementById('upgradeAtkBtn');
+        const upgradeDefBtnEl = document.getElementById('upgradeDefBtn');
         const dodgePromptEl = document.getElementById('dodgePrompt');
         const attackPromptEl = document.getElementById('attackPrompt');
+        const upgradeAudio = new Audio('구매.mp3');
+        upgradeAudio.preload = 'auto';
+        upgradeAudio.volume = 0.85;
+        const insufficientGoldAudio = new Audio('돈부족.mp3');
+        insufficientGoldAudio.preload = 'auto';
+        insufficientGoldAudio.volume = 0.9;
+        const monsterKillAudio = new Audio('몬스터처치.mp3');
+        monsterKillAudio.preload = 'auto';
+        monsterKillAudio.volume = 0.9;
         let audioCtx = null;
+        let lobbyNoticeAnimTimer = null;
+        let lobbyStatAnimTimer = null;
+
+        function drawPixelIcon(canvasId, pattern) {
+            const iconCanvas = document.getElementById(canvasId);
+            const iconCtx = iconCanvas.getContext('2d');
+            iconCtx.clearRect(0, 0, 16, 16);
+            iconCtx.fillStyle = '#000000';
+            for (let y = 0; y < pattern.length; y++) {
+                const row = pattern[y];
+                for (let x = 0; x < row.length; x++) {
+                    if (row[x] === '1') {
+                        iconCtx.fillRect(x, y, 1, 1);
+                    }
+                }
+            }
+        }
+
+        function renderLobbyIcons() {
+            const sword = [
+                '0000000000000000',
+                '0000000000000010',
+                '0000000000000110',
+                '0000000000001100',
+                '0000000000011000',
+                '0000000000110000',
+                '0000000001100000',
+                '0000000011000000',
+                '0000100110000000',
+                '0001111110000000',
+                '0000111100000000',
+                '0000011000000000',
+                '0000111100000000',
+                '0001100110000000',
+                '0011000011000000',
+                '0000000000000000'
+            ];
+            const heart = [
+                '0000000000000000',
+                '0000110011000000',
+                '0001111111100000',
+                '0011111111110000',
+                '0011111111110000',
+                '0001111111100000',
+                '0000111111000000',
+                '0000011110000000',
+                '0000001100000000',
+                '0000000000000000',
+                '0000000000000000',
+                '0000000000000000',
+                '0000000000000000',
+                '0000000000000000',
+                '0000000000000000',
+                '0000000000000000',
+            ];
+            const shield = [
+                '0000011111100000',
+                '0001111111110000',
+                '0011101101111000',
+                '0011000000111000',
+                '0011100001111000',
+                '0011111111111000',
+                '0001111111110000',
+                '0000111111100000',
+                '0000011111000000',
+                '0000001110000000',
+                '0000001110000000',
+                '0000001110000000',
+                '0000000000000000',
+                '0000000000000000',
+                '0000000000000000',
+                '0000000000000000'
+            ];
+
+            drawPixelIcon('iconSword', sword);
+            drawPixelIcon('iconHeart', heart);
+            drawPixelIcon('iconShield', shield);
+        }
 
         function getAudioContext() {
             if (!audioCtx) {
@@ -288,6 +573,93 @@
             oscB.stop(now + 0.07);
         }
 
+        function playUpgradeSfxFallback() {
+            const ac = getAudioContext();
+            if (!ac) return;
+
+            const now = ac.currentTime;
+            const master = ac.createGain();
+            master.gain.setValueAtTime(0.16, now);
+            master.connect(ac.destination);
+
+            const blipA = ac.createOscillator();
+            const blipAGain = ac.createGain();
+            blipA.type = 'square';
+            blipA.frequency.setValueAtTime(920, now);
+            blipA.frequency.exponentialRampToValueAtTime(1320, now + 0.05);
+            blipAGain.gain.setValueAtTime(0.0001, now);
+            blipAGain.gain.exponentialRampToValueAtTime(0.23, now + 0.01);
+            blipAGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+            blipA.connect(blipAGain);
+            blipAGain.connect(master);
+
+            const blipB = ac.createOscillator();
+            const blipBGain = ac.createGain();
+            blipB.type = 'triangle';
+            blipB.frequency.setValueAtTime(680, now + 0.04);
+            blipB.frequency.exponentialRampToValueAtTime(980, now + 0.11);
+            blipBGain.gain.setValueAtTime(0.0001, now + 0.04);
+            blipBGain.gain.exponentialRampToValueAtTime(0.18, now + 0.07);
+            blipBGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+            blipB.connect(blipBGain);
+            blipBGain.connect(master);
+
+            const click = ac.createOscillator();
+            const clickGain = ac.createGain();
+            click.type = 'square';
+            click.frequency.setValueAtTime(1800, now + 0.015);
+            click.frequency.exponentialRampToValueAtTime(240, now + 0.04);
+            clickGain.gain.setValueAtTime(0.0001, now + 0.015);
+            clickGain.gain.exponentialRampToValueAtTime(0.14, now + 0.02);
+            clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+            click.connect(clickGain);
+            clickGain.connect(master);
+
+            blipA.start(now);
+            blipB.start(now + 0.04);
+            click.start(now + 0.015);
+
+            blipA.stop(now + 0.12);
+            blipB.stop(now + 0.17);
+            click.stop(now + 0.055);
+        }
+
+        function playUpgradeSfx() {
+            try {
+                upgradeAudio.currentTime = 0;
+                const playPromise = upgradeAudio.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => playUpgradeSfxFallback());
+                }
+            } catch (err) {
+                playUpgradeSfxFallback();
+            }
+        }
+
+        function playInsufficientGoldSfx() {
+            try {
+                insufficientGoldAudio.currentTime = 0;
+                const playPromise = insufficientGoldAudio.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => {});
+                }
+            } catch (err) {
+                // No fallback needed for this notification sound.
+            }
+        }
+
+        function playMonsterKillSfx() {
+            try {
+                monsterKillAudio.currentTime = 0;
+                const playPromise = monsterKillAudio.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => {});
+                }
+            } catch (err) {
+                // No fallback needed for this notification sound.
+            }
+        }
+
         function setSubTitle(text, isBlinking = false) {
             subTitleEl.innerText = text;
             subTitleEl.classList.toggle('blink-text', isBlinking);
@@ -306,12 +678,20 @@
         };
 
         const GAME_CONFIG = {
-            TOTAL_STAGES: 5
+            TOTAL_STAGES: 5,
+            MONSTERS_PER_STAGE: 5
+        };
+
+        const UPGRADE_CONFIG = {
+            hp: { baseCost: 40, costGrowth: 30, amount: 20, maxLevel: 10, label: '체력' },
+            atk: { baseCost: 50, costGrowth: 35, amount: 5, maxLevel: 10, label: '공격력' },
+            def: { baseCost: 45, costGrowth: 30, amount: 2, maxLevel: 10, label: '방어력' }
         };
 
         const state = {
-            mode: 'START', 
+            mode: 'LOBBY', 
             stage: 1,
+            gold: 0,
             shake: 0,
             timeScale: 1,
             cameraZoom: 1,
@@ -324,6 +704,10 @@
             particles: [],
             afterimages: [],
             attackMarkers: [],
+            messageText: '',
+            messageTimer: 0,
+            messageColor: '#ffffff',
+            lobbyNotice: '',
             tutorial: {
                 hasPlayedOnce: false,
                 hasTriggeredFirstAttackCue: false,
@@ -342,7 +726,11 @@
             originY: 300,
             x: 120, y: 300,
             hp: 100, maxHp: 100,
+            def: 0,
             atk: 25, 
+            hpLevel: 0,
+            atkLevel: 0,
+            defLevel: 0,
             status: 'IDLE',
             timer: 0,
             maxAttackTimer: 40,
@@ -374,8 +762,47 @@
             if (e.repeat) return;
             getAudioContext();
             const key = e.key;
-            if (state.mode === 'START' || state.mode === 'GAMEOVER' || state.mode === 'CLEAR') {
+
+            if (key === 'Escape' || e.code === 'Escape') {
+                if (state.mode === 'PLAY') {
+                    openPauseMenu();
+                    return;
+                }
+                if (state.mode === 'PAUSED') {
+                    resumeFromPause();
+                    return;
+                }
+            }
+
+            // Temporary debug shortcut for balance testing.
+            if (key === 'p' || key === 'P') {
+                state.gold += 10000;
+                showMessage('+10000 GOLD (TEST)', PALETTE.HIT_GOLD, 90);
+                if (state.mode === 'LOBBY') updateLobbyOverlay();
+                return;
+            }
+
+            if (state.mode === 'LOBBY') {
+                if (key === '1' || key === 'Numpad1') {
+                    tryUpgrade('atk');
+                    return;
+                }
+                if (key === '2' || key === 'Numpad2') {
+                    tryUpgrade('hp');
+                    return;
+                }
+                if (key === '3' || key === 'Numpad3') {
+                    tryUpgrade('def');
+                    return;
+                }
                 if (key === ' ' || key === 'Spacebar' || e.code === 'Space') startGame();
+                return;
+            }
+            if (state.mode === 'GAMEOVER' || state.mode === 'CLEAR') {
+                if (key === ' ' || key === 'Spacebar' || e.code === 'Space') enterLobby();
+                return;
+            }
+            if (state.mode === 'PAUSED') {
                 return;
             }
             if (state.mode === 'PLAY') {
@@ -447,6 +874,10 @@
             state.particles = [];
             state.afterimages = [];
             state.attackMarkers = [];
+            state.messageText = '';
+            state.messageTimer = 0;
+            state.messageColor = '#ffffff';
+            state.lobbyNotice = '';
             state.tutorial.hasTriggeredFirstAttackCue = !showTutorialThisRun;
             state.tutorial.isCinematicActive = false;
             state.tutorial.phase = 'OFF';
@@ -457,7 +888,7 @@
             state.tutorial.attackHintFrames = 0;
             dodgePromptEl.style.display = 'none';
             attackPromptEl.style.display = 'none';
-            player.hp = 100;
+            player.hp = player.maxHp;
             player.dodgeCooldown = 0;
             player.x = player.originX;
             player.y = player.originY;
@@ -465,8 +896,72 @@
             enemy.idleTimer = 1;
             document.getElementById('main-title').innerText = "TIMING KNIGHT";
             setSubTitle("PRESS SPACE TO START", true);
+            battleScreenEl.style.display = 'block';
+            lobbyScreenEl.style.display = 'none';
+            pausePanelEl.style.display = 'none';
+            introPanelEl.style.display = 'none';
             overlay.style.display = 'none';
             requestAnimationFrame(gameLoop);
+        }
+
+        function updateLobbyOverlay() {
+            const hpCost = player.hpLevel >= UPGRADE_CONFIG.hp.maxLevel ? 'MAX' : `${getUpgradeCost('hp')}G`;
+            const atkCost = player.atkLevel >= UPGRADE_CONFIG.atk.maxLevel ? 'MAX' : `${getUpgradeCost('atk')}G`;
+            const defCost = player.defLevel >= UPGRADE_CONFIG.def.maxLevel ? 'MAX' : `${getUpgradeCost('def')}G`;
+
+            lobbyGoldLineEl.innerText = `GOLD: ${state.gold}`;
+            lobbyStatLineEl.innerText = `HP ${player.maxHp} | ATK ${player.atk} | DEF ${player.def}`;
+            lobbyNoticeLineEl.innerText = state.lobbyNotice;
+
+            hpCardStatEl.innerText = `HP LV ${player.hpLevel} | +${UPGRADE_CONFIG.hp.amount} | ${hpCost}`;
+            atkCardStatEl.innerText = `ATK LV ${player.atkLevel} | +${UPGRADE_CONFIG.atk.amount} | ${atkCost}`;
+            defCardStatEl.innerText = `DEF LV ${player.defLevel} | +${UPGRADE_CONFIG.def.amount} | ${defCost}`;
+
+            upgradeHpBtnEl.disabled = player.hpLevel >= UPGRADE_CONFIG.hp.maxLevel;
+            upgradeAtkBtnEl.disabled = player.atkLevel >= UPGRADE_CONFIG.atk.maxLevel;
+            upgradeDefBtnEl.disabled = player.defLevel >= UPGRADE_CONFIG.def.maxLevel;
+        }
+
+        function enterLobby() {
+            state.mode = 'LOBBY';
+            attackPromptEl.style.display = 'none';
+            dodgePromptEl.style.display = 'none';
+            state.timeScale = 1;
+            state.cameraTargetZoom = 1;
+            state.cameraTargetFocusX = canvas.width / 2;
+            state.cameraTargetFocusY = canvas.height / 2;
+            battleScreenEl.style.display = 'none';
+            lobbyScreenEl.style.display = 'block';
+            pausePanelEl.style.display = 'none';
+            introPanelEl.style.display = 'none';
+            overlay.style.display = 'none';
+            updateLobbyOverlay();
+        }
+
+        function openPauseMenu() {
+            if (state.mode !== 'PLAY') return;
+            state.mode = 'PAUSED';
+            battleScreenEl.style.display = 'block';
+            lobbyScreenEl.style.display = 'none';
+            introPanelEl.style.display = 'none';
+            pausePanelEl.style.display = 'block';
+            overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.58)';
+            overlay.style.display = 'flex';
+        }
+
+        function resumeFromPause() {
+            if (state.mode !== 'PAUSED') return;
+            state.mode = 'PLAY';
+            pausePanelEl.style.display = 'none';
+            overlay.style.display = 'none';
+            requestAnimationFrame(gameLoop);
+        }
+
+        function returnToLobbyFromPause() {
+            if (state.mode !== 'PAUSED') return;
+            pausePanelEl.style.display = 'none';
+            overlay.style.display = 'none';
+            enterLobby();
         }
 
         function resetEnemy() {
@@ -571,6 +1066,87 @@
             }
         }
 
+        function getUpgradeCost(type) {
+            const cfg = UPGRADE_CONFIG[type];
+            const level = player[`${type}Level`];
+            return cfg.baseCost + (level * cfg.costGrowth);
+        }
+
+        function showMessage(text, color = '#ffffff', duration = 80) {
+            state.messageText = text;
+            state.messageColor = color;
+            state.messageTimer = duration;
+        }
+
+        function emphasizeInsufficientGoldNotice() {
+            if (!lobbyNoticeLineEl) return;
+            lobbyNoticeLineEl.classList.remove('notice-bounce');
+            void lobbyNoticeLineEl.offsetWidth;
+            lobbyNoticeLineEl.classList.add('notice-bounce');
+            if (lobbyNoticeAnimTimer) clearTimeout(lobbyNoticeAnimTimer);
+            lobbyNoticeAnimTimer = setTimeout(() => {
+                lobbyNoticeLineEl.classList.remove('notice-bounce');
+            }, 380);
+        }
+
+        function emphasizeUpgradedStat(type) {
+            let targetEl = null;
+            if (type === 'hp') targetEl = hpCardStatEl;
+            else if (type === 'atk') targetEl = atkCardStatEl;
+            else if (type === 'def') targetEl = defCardStatEl;
+            if (!targetEl) return;
+
+            targetEl.classList.remove('stat-bounce');
+            void targetEl.offsetWidth;
+            targetEl.classList.add('stat-bounce');
+            if (lobbyStatAnimTimer) clearTimeout(lobbyStatAnimTimer);
+            lobbyStatAnimTimer = setTimeout(() => {
+                targetEl.classList.remove('stat-bounce');
+            }, 380);
+        }
+
+        function tryUpgrade(type) {
+            const cfg = UPGRADE_CONFIG[type];
+            const levelKey = `${type}Level`;
+            if (player[levelKey] >= cfg.maxLevel) {
+                state.lobbyNotice = `${cfg.label} 업그레이드 최대`;
+                showMessage(`${cfg.label} 업그레이드 최대`, '#f1c40f', 70);
+                if (state.mode === 'LOBBY') updateLobbyOverlay();
+                return;
+            }
+
+            const cost = getUpgradeCost(type);
+            if (state.gold < cost) {
+                state.lobbyNotice = `골드 부족 (${cost}G 필요)`;
+                showMessage(`골드 부족 (${cost}G 필요)`, '#e74c3c', 70);
+                playInsufficientGoldSfx();
+                if (state.mode === 'LOBBY') {
+                    updateLobbyOverlay();
+                    emphasizeInsufficientGoldNotice();
+                }
+                return;
+            }
+
+            state.gold -= cost;
+            player[levelKey] += 1;
+            playUpgradeSfx();
+
+            if (type === 'hp') {
+                player.maxHp += cfg.amount;
+                player.hp = Math.min(player.maxHp, player.hp + cfg.amount);
+            } else if (type === 'atk') {
+                player.atk += cfg.amount;
+            } else if (type === 'def') {
+                player.def += cfg.amount;
+            }
+
+            state.lobbyNotice = '';
+            if (state.mode === 'LOBBY') {
+                updateLobbyOverlay();
+                emphasizeUpgradedStat(type);
+            }
+        }
+
         function addAfterimage(x, y, status) {
             state.afterimages.push({ x, y, status, life: 0.8 });
         }
@@ -584,6 +1160,10 @@
             createHitEffect(enemy.x - 10, enemy.y - 45);
             if (enemy.hp <= 0) {
                 enemy.hp = 0;
+                playMonsterKillSfx();
+                const reward = 30 + (state.stage * 20);
+                state.gold += reward;
+                showMessage(`+${reward} GOLD`, PALETTE.HIT_GOLD, 90);
                 state.nextStageTimer = 60; 
             }
         }
@@ -607,6 +1187,7 @@
             const dt = state.timeScale;
             if (player.dodgeCooldown > 0) player.dodgeCooldown = Math.max(0, player.dodgeCooldown - dt);
             if (enemy.hitFlash > 0) enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
+            if (state.messageTimer > 0) state.messageTimer = Math.max(0, state.messageTimer - dt);
 
             if (
                 state.stage === 1 &&
@@ -807,7 +1388,8 @@
                         }
 
                         if (!dodged) {
-                            player.hp -= 20;
+                            const incomingDamage = Math.max(1, 20 - player.def);
+                            player.hp -= incomingDamage;
                             state.shake = 20;
                             player.status = 'HIT';
                             player.timer = 15;
@@ -833,17 +1415,27 @@
         function gameOver() {
             state.mode = 'GAMEOVER';
             attackPromptEl.style.display = 'none';
+            battleScreenEl.style.display = 'block';
+            lobbyScreenEl.style.display = 'none';
+            pausePanelEl.style.display = 'none';
+            introPanelEl.style.display = 'block';
+            overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.92)';
             overlay.style.display = 'flex';
             document.getElementById('main-title').innerText = "GAME OVER";
-            setSubTitle(`STAGE ${state.stage} FAILED. PRESS SPACE TO RESTART`);
+            setSubTitle(`STAGE ${state.stage} FAILED. PRESS SPACE FOR LOBBY`);
         }
 
         function gameClear() {
             state.mode = 'CLEAR';
             attackPromptEl.style.display = 'none';
+            battleScreenEl.style.display = 'block';
+            lobbyScreenEl.style.display = 'none';
+            pausePanelEl.style.display = 'none';
+            introPanelEl.style.display = 'block';
+            overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.92)';
             overlay.style.display = 'flex';
             document.getElementById('main-title').innerText = "STAGE CLEAR!";
-            setSubTitle(`ALL ${GAME_CONFIG.TOTAL_STAGES} STAGES CLEARED | PRESS SPACE TO RESTART`);
+            setSubTitle(`ALL ${GAME_CONFIG.TOTAL_STAGES} STAGES CLEARED | PRESS SPACE FOR LOBBY`);
         }
 
         function drawPixelSprite(ctx, x, y, size, status, customAlpha = 1.0) {
@@ -922,9 +1514,11 @@
             if (state.shake > 0.5) ctx.translate(Math.random() * state.shake - state.shake/2, Math.random() * state.shake - state.shake/2);
             ctx.fillStyle = PALETTE.DARK; ctx.fillRect(0, 300, canvas.width, 100);
             ctx.fillStyle = PALETTE.DARK; ctx.font = '10px "Press Start 2P"'; ctx.fillText(`STAGE ${state.stage}/${GAME_CONFIG.TOTAL_STAGES}`, 20, 30);
+            ctx.fillText(`GOLD ${state.gold}`, 20, 95);
             drawBar(20, 50, 180, 12, player.hp / player.maxHp, '#2ecc71', 'HERO HP');
             if (player.dodgeCooldown > 0) drawBar(20, 70, 60, 6, 1 - (player.dodgeCooldown / player.maxDodgeCooldown), '#9b59b6', 'DODGE');
-            if (enemy.hp > 0 || state.nextStageTimer > 0) drawBar(canvas.width - 200, 30, 180, 12, enemy.hp / enemy.maxHp, '#e74c3c', 'BOSS HP');
+            const enemyHpLabel = (state.stage % GAME_CONFIG.MONSTERS_PER_STAGE === 0) ? 'BOSS HP' : 'MONSTER HP';
+            if (enemy.hp > 0 || state.nextStageTimer > 0) drawBar(canvas.width - 200, 30, 180, 12, enemy.hp / enemy.maxHp, '#e74c3c', enemyHpLabel);
             state.afterimages.forEach(img => drawPixelSprite(ctx, img.x, img.y, 80, img.status, img.life * 0.4));
             drawPixelSprite(ctx, player.x, player.y, 80, player.status);
             if (enemy.hp > 0) drawEnemy();
@@ -938,6 +1532,15 @@
             });
             ctx.globalAlpha = 1.0;
             state.attackMarkers.forEach(marker => drawAttackX(marker.x, marker.y, marker.alpha));
+
+            if (state.messageTimer > 0) {
+                ctx.fillStyle = state.messageColor;
+                ctx.font = '10px "Press Start 2P"';
+                ctx.textAlign = 'center';
+                ctx.fillText(state.messageText, canvas.width / 2, 36);
+                ctx.textAlign = 'start';
+            }
+
             ctx.restore();
         }
 
@@ -970,7 +1573,29 @@
             ctx.fillStyle = PALETTE.DARK; ctx.font = '7px "Press Start 2P"'; ctx.fillText(label, x, y - 5);
         }
 
-        window.onload = () => { draw(); };
+        upgradeHpBtnEl.addEventListener('click', () => {
+            if (state.mode !== 'LOBBY') return;
+            tryUpgrade('hp');
+        });
+        upgradeAtkBtnEl.addEventListener('click', () => {
+            if (state.mode !== 'LOBBY') return;
+            tryUpgrade('atk');
+        });
+        upgradeDefBtnEl.addEventListener('click', () => {
+            if (state.mode !== 'LOBBY') return;
+            tryUpgrade('def');
+        });
+        pauseContinueBtnEl.addEventListener('click', () => {
+            resumeFromPause();
+        });
+        pauseLobbyBtnEl.addEventListener('click', () => {
+            returnToLobbyFromPause();
+        });
+
+        window.onload = () => {
+            renderLobbyIcons();
+            enterLobby();
+        };
     </script>
 </body>
 </html>
