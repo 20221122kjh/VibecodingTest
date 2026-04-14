@@ -1371,8 +1371,8 @@
                     ) {
                         let dodged = false;
                         
-                        // 공통: 뒤로 회피(DODGE_BACK) 중이면 모든 대각선/직선 공격 회피 가능
-                        if (player.status === 'DODGE_BACK') {
+                        // 공통: 뒤로 회피(DODGE_BACK)는 LONG을 제외한 공격만 회피 가능
+                        if (player.status === 'DODGE_BACK' && enemy.attackDir !== 'LONG') {
                             dodged = true;
                         } else {
                             // 방향별 특수 회피 판정
