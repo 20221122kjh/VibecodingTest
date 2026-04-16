@@ -678,7 +678,8 @@
         };
 
         const GAME_CONFIG = {
-            TOTAL_STAGES: 5,
+            TOTAL_STAGES: 15,
+            STAGES_PER_WORLD: 5,
             MONSTERS_PER_STAGE: 5
         };
 
@@ -814,6 +815,57 @@
             hitFlash: 0
         };
 
+        function getStageLabel(stageNumber = state.stage) {
+            const world = Math.ceil(stageNumber / GAME_CONFIG.STAGES_PER_WORLD);
+            const stageInWorld = ((stageNumber - 1) % GAME_CONFIG.STAGES_PER_WORLD) + 1;
+            return `${world}-${stageInWorld}`;
+        }
+
+        function getFinalStageLabel() {
+            return getStageLabel(GAME_CONFIG.TOTAL_STAGES);
+        }
+
+        function isBossStage(stageNumber = state.stage) {
+            return stageNumber % GAME_CONFIG.MONSTERS_PER_STAGE === 0;
+        }
+
+        function isFinalBossStage(stageNumber = state.stage) {
+            return stageNumber === GAME_CONFIG.TOTAL_STAGES;
+        }
+
+        function getEnemyDifficultyProfile(stageNumber = state.stage) {
+            if (isFinalBossStage(stageNumber)) {
+                return {
+                    hpMultiplier: 2.35,
+                    damageMultiplier: 1.9,
+                    idleMultiplier: 0.55,
+                    preparingMultiplier: 0.8,
+                    holdMultiplier: 0.78,
+                    attackMultiplier: 0.8
+                };
+            }
+
+            if (isBossStage(stageNumber)) {
+                return {
+                    hpMultiplier: 1.55,
+                    damageMultiplier: 1.35,
+                    idleMultiplier: 0.72,
+                    preparingMultiplier: 0.85,
+                    holdMultiplier: 0.82,
+                    attackMultiplier: 0.82
+                };
+            }
+
+            return {
+                hpMultiplier: 1,
+                damageMultiplier: 1,
+                idleMultiplier: 1,
+                preparingMultiplier: 1,
+                holdMultiplier: 1,
+                attackMultiplier: 1
+            };
+        }
+
         window.addEventListener('keydown', (e) => {
             if (e.repeat) return;
             getAudioContext();
@@ -835,6 +887,12 @@
                 state.gold += 10000;
                 showMessage('+10000 GOLD (TEST)', PALETTE.HIT_GOLD, 90);
                 if (state.mode === 'LOBBY') updateLobbyOverlay();
+                return;
+            }
+
+            // Debug shortcut: jump directly to final stage (3-5).
+            if (key === 'o' || key === 'O') {
+                jumpToFinalStage();
                 return;
             }
 
@@ -965,6 +1023,47 @@
             requestAnimationFrame(gameLoop);
         }
 
+        function jumpToFinalStage() {
+            if (state.mode !== 'PLAY') {
+                startGame();
+            }
+
+            state.stage = GAME_CONFIG.TOTAL_STAGES;
+            state.timeScale = 1;
+            state.cameraTargetZoom = 1;
+            state.cameraTargetFocusX = canvas.width / 2;
+            state.cameraTargetFocusY = canvas.height / 2;
+            state.particles = [];
+            state.afterimages = [];
+            state.attackMarkers = [];
+            state.messageTimer = 0;
+
+            state.tutorial.hasPlayedOnce = true;
+            state.tutorial.hasTriggeredFirstAttackCue = true;
+            state.tutorial.isCinematicActive = false;
+            state.tutorial.phase = 'OFF';
+            state.tutorial.slowFrames = 0;
+            state.tutorial.hasCompletedFirstDodge = true;
+            state.tutorial.attackHintShown = true;
+            state.tutorial.attackedSinceTutorialEnd = false;
+            state.tutorial.attackHintFrames = 0;
+
+            player.status = 'IDLE';
+            player.timer = 0;
+            player.isDodging = false;
+            player.dodgeCooldown = 0;
+            player.x = player.originX;
+            player.y = player.originY;
+            player.hp = player.maxHp;
+
+            dodgePromptEl.style.display = 'none';
+            attackPromptEl.style.display = 'none';
+
+            resetEnemy();
+            enemy.idleTimer = 1;
+            showMessage(`JUMP TO STAGE ${getStageLabel()}`, PALETTE.HIT_GOLD, 90);
+        }
+
         function updateLobbyOverlay() {
             const hpCost = player.hpLevel >= UPGRADE_CONFIG.hp.maxLevel ? 'MAX' : `${getUpgradeCost('hp')}G`;
             const atkCost = player.atkLevel >= UPGRADE_CONFIG.atk.maxLevel ? 'MAX' : `${getUpgradeCost('atk')}G`;
@@ -1026,18 +1125,34 @@
         }
 
         function resetEnemy() {
+<<<<<<< HEAD
             const profile = getEnemyProfile(state.stage);
             enemy.maxHp = profile.hp;
+=======
+            const difficulty = getEnemyDifficultyProfile();
+            const baseMaxHp = 80 + (state.stage * 40);
+            const baseIdleTimer = Math.max(120, 300 - (state.stage * 3));
+            enemy.maxHp = Math.round(baseMaxHp * difficulty.hpMultiplier);
+>>>>>>> 51338a4 (increase total stages to 15; implement stage labeling and boss difficulty profiles; add debug shortcut for final stage)
             enemy.hp = enemy.maxHp;
             enemy.attackPower = profile.damage;
             enemy.status = 'IDLE';
             enemy.timer = 0;
+<<<<<<< HEAD
             enemy.maxPreparingTimer = profile.preparingTimer;
             enemy.preparingDuration = enemy.maxPreparingTimer;
             enemy.maxHoldTimer = profile.holdTimer;
             enemy.maxAttackTimer = profile.attackTimer;
             enemy.idleResetTimer = profile.idleTimer;
             enemy.idleTimer = enemy.idleResetTimer;
+=======
+            enemy.maxPreparingTimer = Math.max(20, Math.round(45 * difficulty.preparingMultiplier));
+            enemy.maxHoldTimer = Math.max(24, Math.round(55 * difficulty.holdMultiplier));
+            enemy.maxAttackTimer = Math.max(12, Math.round(25 * difficulty.attackMultiplier));
+            enemy.idleTimer = Math.max(60, Math.round(baseIdleTimer * difficulty.idleMultiplier));
+            enemy.damageMultiplier = difficulty.damageMultiplier;
+            enemy.dodgeCooldown = 0;
+>>>>>>> 51338a4 (increase total stages to 15; implement stage labeling and boss difficulty profiles; add debug shortcut for final stage)
             enemy.x = enemy.originX;
             enemy.y = enemy.originY;
             enemy.waveOffset = 0;
@@ -1222,8 +1337,29 @@
             state.afterimages.push({ x, y, status, life: 0.8 });
         }
 
+        function tryFinalBossDodgeOnPlayerAttack() {
+            if (!isFinalBossStage() || enemy.hp <= 0) return false;
+            if (enemy.status === 'DODGE_RIGHT' || enemy.status === 'DODGE_UP' || enemy.status === 'DODGE_DOWN') return true;
+            if (enemy.dodgeCooldown > 0) return false;
+
+            const dodgeChance = 0.78;
+            if (Math.random() > dodgeChance) return false;
+
+            const dodgePatterns = ['DODGE_RIGHT', 'DODGE_UP', 'DODGE_DOWN'];
+            enemy.status = dodgePatterns[Math.floor(Math.random() * dodgePatterns.length)];
+            enemy.timer = enemy.maxDodgeTimer;
+            enemy.dodgeCooldown = 85;
+            enemy.hasDealtDamage = false;
+            state.attackMarkers = [];
+            state.shake = 8;
+            createBurst(enemy.x, enemy.y - 45, '#ecf0f1');
+            showMessage('FINAL BOSS DODGE!', '#ffffff', 28);
+            return true;
+        }
+
         function checkHit() {
             if (enemy.hp <= 0) return;
+            if (tryFinalBossDodgeOnPlayerAttack()) return;
             playHitSfx();
             enemy.hp -= player.atk;
             state.shake = 15;
@@ -1257,6 +1393,7 @@
 
             const dt = state.timeScale;
             if (player.dodgeCooldown > 0) player.dodgeCooldown = Math.max(0, player.dodgeCooldown - dt);
+            if (enemy.dodgeCooldown > 0) enemy.dodgeCooldown = Math.max(0, enemy.dodgeCooldown - dt);
             if (enemy.hitFlash > 0) enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
             if (state.messageTimer > 0) state.messageTimer = Math.max(0, state.messageTimer - dt);
 
@@ -1349,7 +1486,29 @@
             }
 
             if (enemy.hp > 0) {
-                if (enemy.status === 'IDLE') {
+                if (enemy.status === 'DODGE_RIGHT' || enemy.status === 'DODGE_UP' || enemy.status === 'DODGE_DOWN') {
+                    enemy.timer -= dt;
+                    const dodgeProgress = 1 - Math.max(0, enemy.timer / enemy.maxDodgeTimer);
+                    const leap = Math.sin(Math.min(1, dodgeProgress) * Math.PI);
+
+                    if (enemy.status === 'DODGE_RIGHT') {
+                        enemy.x = enemy.originX + (130 * leap);
+                        enemy.y = enemy.originY;
+                    } else if (enemy.status === 'DODGE_UP') {
+                        enemy.x = enemy.originX + (42 * leap);
+                        enemy.y = enemy.originY - (100 * leap);
+                    } else {
+                        enemy.x = enemy.originX + (42 * leap);
+                        enemy.y = enemy.originY + (100 * leap);
+                    }
+
+                    if (enemy.timer <= 0) {
+                        enemy.status = 'IDLE';
+                        enemy.x = enemy.originX;
+                        enemy.y = enemy.originY;
+                        enemy.idleTimer = Math.max(55, Math.round(Math.max(120, 300 - (state.stage * 3)) * 0.45));
+                    }
+                } else if (enemy.status === 'IDLE') {
                     if (state.nextStageTimer === 0) {
                         enemy.idleTimer -= dt;
                         if (enemy.idleTimer <= 0) {
@@ -1535,7 +1694,12 @@
                         }
 
                         if (!dodged) {
+<<<<<<< HEAD
                             const incomingDamage = Math.max(1, enemy.attackPower - player.def);
+=======
+                            const baseIncomingDamage = Math.max(1, 20 - player.def);
+                            const incomingDamage = Math.max(1, Math.round(baseIncomingDamage * enemy.damageMultiplier));
+>>>>>>> 51338a4 (increase total stages to 15; implement stage labeling and boss difficulty profiles; add debug shortcut for final stage)
                             player.hp -= incomingDamage;
                             state.shake = 20;
                             player.status = 'HIT';
@@ -1549,10 +1713,16 @@
                     }
 
                     if (enemy.timer <= 0) {
+                        const difficulty = getEnemyDifficultyProfile();
+                        const baseIdleTimer = Math.max(120, 300 - (state.stage * 3));
                         enemy.status = 'IDLE';
                         enemy.x = enemy.originX;
                         enemy.y = enemy.originY;
+<<<<<<< HEAD
                         enemy.idleTimer = enemy.idleResetTimer;
+=======
+                        enemy.idleTimer = Math.max(60, Math.round(baseIdleTimer * difficulty.idleMultiplier));
+>>>>>>> 51338a4 (increase total stages to 15; implement stage labeling and boss difficulty profiles; add debug shortcut for final stage)
                     }
                 }
             }
@@ -1569,7 +1739,7 @@
             overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.92)';
             overlay.style.display = 'flex';
             document.getElementById('main-title').innerText = "GAME OVER";
-            setSubTitle(`STAGE ${state.stage} FAILED. PRESS SPACE FOR LOBBY`);
+            setSubTitle(`STAGE ${getStageLabel()} FAILED. PRESS SPACE FOR LOBBY`);
         }
 
         function gameClear() {
@@ -1582,7 +1752,7 @@
             overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.92)';
             overlay.style.display = 'flex';
             document.getElementById('main-title').innerText = "STAGE CLEAR!";
-            setSubTitle(`ALL ${GAME_CONFIG.TOTAL_STAGES} STAGES CLEARED | PRESS SPACE FOR LOBBY`);
+            setSubTitle(`ALL ${GAME_CONFIG.TOTAL_STAGES} STAGES CLEARED (${getFinalStageLabel()}) | PRESS SPACE FOR LOBBY`);
         }
 
         function drawPixelSprite(ctx, x, y, size, status, customAlpha = 1.0) {
@@ -1660,11 +1830,13 @@
             ctx.translate(-state.cameraFocusX, -state.cameraFocusY);
             if (state.shake > 0.5) ctx.translate(Math.random() * state.shake - state.shake/2, Math.random() * state.shake - state.shake/2);
             ctx.fillStyle = PALETTE.DARK; ctx.fillRect(0, 300, canvas.width, 100);
-            ctx.fillStyle = PALETTE.DARK; ctx.font = '10px "Press Start 2P"'; ctx.fillText(`STAGE ${state.stage}/${GAME_CONFIG.TOTAL_STAGES}`, 20, 30);
+            ctx.fillStyle = PALETTE.DARK;
+            ctx.font = '10px "Press Start 2P"';
+            ctx.textAlign = 'start';
             ctx.fillText(`GOLD ${state.gold}`, 20, 95);
             drawBar(20, 50, 180, 12, player.hp / player.maxHp, '#2ecc71', 'HERO HP');
             if (player.dodgeCooldown > 0) drawBar(20, 70, 60, 6, 1 - (player.dodgeCooldown / player.maxDodgeCooldown), '#9b59b6', 'DODGE');
-            const enemyHpLabel = (state.stage % GAME_CONFIG.MONSTERS_PER_STAGE === 0) ? 'BOSS HP' : 'MONSTER HP';
+            const enemyHpLabel = isBossStage() ? 'BOSS HP' : 'MONSTER HP';
             if (enemy.hp > 0 || state.nextStageTimer > 0) drawBar(canvas.width - 200, 30, 180, 12, enemy.hp / enemy.maxHp, '#e74c3c', enemyHpLabel);
             state.afterimages.forEach(img => drawPixelSprite(ctx, img.x, img.y, 80, img.status, img.life * 0.4));
             drawPixelSprite(ctx, player.x, player.y, 80, player.status);
@@ -1688,6 +1860,13 @@
                 ctx.textAlign = 'start';
             }
 
+            ctx.restore();
+
+            ctx.save();
+            ctx.fillStyle = PALETTE.DARK;
+            ctx.font = '10px "Press Start 2P"';
+            ctx.textAlign = 'center';
+            ctx.fillText(`STAGE ${getStageLabel()}`, canvas.width / 2, 24);
             ctx.restore();
         }
 
