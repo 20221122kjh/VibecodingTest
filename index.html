@@ -437,13 +437,13 @@
         const upgradeDefBtnEl = document.getElementById('upgradeDefBtn');
         const dodgePromptEl = document.getElementById('dodgePrompt');
         const attackPromptEl = document.getElementById('attackPrompt');
-        const upgradeAudio = new Audio('구매.mp3');
+        const upgradeAudio = new Audio('sound/buy.mp3');
         upgradeAudio.preload = 'auto';
         upgradeAudio.volume = 0.85;
-        const insufficientGoldAudio = new Audio('돈부족.mp3');
+        const insufficientGoldAudio = new Audio('sound/no_money.mp3');
         insufficientGoldAudio.preload = 'auto';
         insufficientGoldAudio.volume = 0.9;
-        const monsterKillAudio = new Audio('몬스터처치.mp3');
+        const monsterKillAudio = new Audio('sound/Kill_sound.mp3');
         monsterKillAudio.preload = 'auto';
         monsterKillAudio.volume = 0.9;
         let audioCtx = null;
@@ -688,6 +688,56 @@
             def: { baseCost: 45, costGrowth: 30, amount: 2, maxLevel: 10, label: '방어력' }
         };
 
+        function isBossStage(stage = state.stage) {
+            return stage % GAME_CONFIG.MONSTERS_PER_STAGE === 0;
+        }
+
+        function isFinalBossStage(stage = state.stage) {
+            return stage === GAME_CONFIG.TOTAL_STAGES;
+        }
+
+        function getEnemyProfile(stage = state.stage) {
+            const baseHp = 80 + (stage * 40);
+            const baseDamage = 20;
+            const baseIdleTimer = Math.max(120, 300 - (stage * 3));
+            const basePreparingTimer = 45;
+            const baseHoldTimer = 55;
+            const baseAttackTimer = 25;
+
+            let profile = {
+                hp: baseHp,
+                damage: baseDamage,
+                idleTimer: baseIdleTimer,
+                preparingTimer: basePreparingTimer,
+                holdTimer: baseHoldTimer,
+                attackTimer: baseAttackTimer
+            };
+
+            if (isBossStage(stage)) {
+                profile = {
+                    hp: Math.floor(profile.hp * 1.45),
+                    damage: profile.damage + 8,
+                    idleTimer: Math.max(90, profile.idleTimer - 35),
+                    preparingTimer: basePreparingTimer,
+                    holdTimer: baseHoldTimer,
+                    attackTimer: baseAttackTimer
+                };
+            }
+
+            if (isFinalBossStage(stage)) {
+                profile = {
+                    hp: Math.floor(profile.hp * 1.8),
+                    damage: profile.damage + 12,
+                    idleTimer: Math.max(70, profile.idleTimer - 20),
+                    preparingTimer: basePreparingTimer,
+                    holdTimer: baseHoldTimer,
+                    attackTimer: baseAttackTimer
+                };
+            }
+
+            return profile;
+        }
+
         const state = {
             mode: 'LOBBY', 
             stage: 1,
@@ -745,12 +795,18 @@
             originY: 300,
             x: 680, y: 300,
             hp: 100, maxHp: 100,
+            attackPower: 20,
             status: 'IDLE',
             attackDir: 'MID', 
+            waveOffset: 0,
+            waveCycles: 0,
+            orbitCycles: 0,
             timer: 0,
             maxPreparingTimer: 45, 
+            preparingDuration: 45,
             maxHoldTimer: 55,      
             idleTimer: 300, 
+            idleResetTimer: 300,
             maxAttackTimer: 25,    
             hasDealtDamage: false,
             prepX: 680,
@@ -783,6 +839,10 @@
             }
 
             if (state.mode === 'LOBBY') {
+                if (key === 'o' || key === 'O' || e.code === 'KeyO') {
+                    startGame(5);
+                    return;
+                }
                 if (key === '1' || key === 'Numpad1') {
                     tryUpgrade('atk');
                     return;
@@ -858,12 +918,13 @@
             }
         });
 
-        function startGame() {
-            const showTutorialThisRun = !state.tutorial.hasPlayedOnce;
+        function startGame(startStage = 1) {
+            const targetStage = Math.max(1, Math.min(GAME_CONFIG.TOTAL_STAGES, startStage));
+            const showTutorialThisRun = targetStage === 1 && !state.tutorial.hasPlayedOnce;
             state.tutorial.hasPlayedOnce = true;
 
             state.mode = 'PLAY';
-            state.stage = 1;
+            state.stage = targetStage;
             state.timeScale = 1;
             state.cameraZoom = 1;
             state.cameraTargetZoom = 1;
@@ -965,13 +1026,23 @@
         }
 
         function resetEnemy() {
-            enemy.maxHp = 80 + (state.stage * 40);
+            const profile = getEnemyProfile(state.stage);
+            enemy.maxHp = profile.hp;
             enemy.hp = enemy.maxHp;
+            enemy.attackPower = profile.damage;
             enemy.status = 'IDLE';
             enemy.timer = 0;
-            enemy.idleTimer = Math.max(120, 300 - (state.stage * 3)); 
+            enemy.maxPreparingTimer = profile.preparingTimer;
+            enemy.preparingDuration = enemy.maxPreparingTimer;
+            enemy.maxHoldTimer = profile.holdTimer;
+            enemy.maxAttackTimer = profile.attackTimer;
+            enemy.idleResetTimer = profile.idleTimer;
+            enemy.idleTimer = enemy.idleResetTimer;
             enemy.x = enemy.originX;
             enemy.y = enemy.originY;
+            enemy.waveOffset = 0;
+            enemy.waveCycles = 0;
+            enemy.orbitCycles = 0;
             enemy.hasDealtDamage = false;
             enemy.hitFlash = 0;
             state.nextStageTimer = 0;
@@ -1283,22 +1354,57 @@
                         enemy.idleTimer -= dt;
                         if (enemy.idleTimer <= 0) {
                             enemy.status = 'PREPARING';
-                            enemy.timer = enemy.maxPreparingTimer; 
                             enemy.hasDealtDamage = false;
                             
+                            let patterns = [];
                             if (state.stage === 1) {
-                                enemy.attackDir = 'MID';
+                                patterns = ['MID'];
+                            } else if (state.stage === 2) {
+                                patterns = ['MID', 'MID_WAVE'];
+                            } else if (state.stage === 3) {
+                                patterns = ['AIR_STRAIGHT', 'GROUND_STRAIGHT'];
+                            } else if (state.stage === 4) {
+                                patterns = ['AIR_DIVE', 'GROUND_UPPER', 'LONG', 'AIR_ORBIT_SWEEP'];
+                            } else if (state.stage === 5) {
+                                patterns = ['MID_WAVE', 'AIR_STRAIGHT', 'AIR_DIVE', 'GROUND_STRAIGHT', 'GROUND_UPPER', 'LONG', 'AIR_ORBIT_SWEEP'];
+                            }
+                            enemy.attackDir = patterns[Math.floor(Math.random() * patterns.length)];
+
+                            if (enemy.attackDir === 'MID_WAVE') {
+                                const waveOffsets = [0, -80, 80];
+                                enemy.waveOffset = waveOffsets[Math.floor(Math.random() * waveOffsets.length)];
+                                enemy.waveCycles = Math.random() < 0.5 ? 2 : 3;
+                                enemy.orbitCycles = 0;
+                                enemy.preparingDuration = Math.floor(enemy.maxPreparingTimer * 2.2);
+                            } else if (enemy.attackDir === 'AIR_ORBIT_SWEEP') {
+                                enemy.waveOffset = 0;
+                                enemy.waveCycles = 0;
+                                enemy.orbitCycles = Math.random() < 0.5 ? 2 : 3;
+                                enemy.preparingDuration = Math.floor(enemy.maxPreparingTimer * 2.0);
                             } else {
-                                const patterns = ['MID', 'AIR_STRAIGHT', 'AIR_DIVE', 'GROUND_STRAIGHT', 'GROUND_UPPER', 'LONG'];
-                                enemy.attackDir = patterns[Math.floor(Math.random() * patterns.length)];
+                                enemy.waveOffset = 0;
+                                enemy.waveCycles = 0;
+                                enemy.orbitCycles = 0;
+                                enemy.preparingDuration = enemy.maxPreparingTimer;
                             }
 
-                            if (enemy.attackDir.startsWith('AIR')) {
+                            enemy.timer = enemy.preparingDuration;
+
+                            if (enemy.attackDir === 'AIR_ORBIT_SWEEP') {
+                                enemy.prepX = enemy.originX + 70;
+                                enemy.prepY = enemy.originY - 30;
+                            } else if (enemy.attackDir.startsWith('AIR')) {
                                 enemy.prepX = enemy.originX + 70;
                                 enemy.prepY = enemy.originY - 120;
                             } else if (enemy.attackDir.startsWith('GROUND')) {
                                 enemy.prepX = enemy.originX + 70;
                                 enemy.prepY = enemy.originY + 60;
+                            } else if (enemy.attackDir === 'MID_WAVE') {
+                                enemy.prepX = enemy.originX;
+                                enemy.prepY = enemy.originY;
+                            } else if (enemy.attackDir === 'LONG') {
+                                enemy.prepX = enemy.originX + 70;
+                                enemy.prepY = enemy.originY;
                             } else {
                                 enemy.prepX = enemy.originX + 70;
                                 enemy.prepY = enemy.originY;
@@ -1307,9 +1413,21 @@
                     }
                 } else if (enemy.status === 'PREPARING') {
                     enemy.timer -= dt;
-                    const progress = (enemy.maxPreparingTimer - enemy.timer) / enemy.maxPreparingTimer;
-                    enemy.x = enemy.originX + (enemy.prepX - enemy.originX) * progress;
-                    enemy.y = enemy.originY + (enemy.prepY - enemy.originY) * progress;
+                    const progress = (enemy.preparingDuration - enemy.timer) / enemy.preparingDuration;
+                    if (enemy.attackDir === 'MID_WAVE') {
+                        enemy.x = enemy.originX;
+                        const wave = Math.sin(progress * Math.PI * 2 * enemy.waveCycles) * 34;
+                        enemy.y = enemy.originY + wave;
+                    } else if (enemy.attackDir === 'AIR_ORBIT_SWEEP') {
+                        const baseX = enemy.originX + (enemy.prepX - enemy.originX) * progress;
+                        const baseY = enemy.originY + (enemy.prepY - enemy.originY) * progress;
+                        const orbitAngle = progress * Math.PI * 2 * enemy.orbitCycles;
+                        enemy.x = baseX + Math.cos(orbitAngle) * 30;
+                        enemy.y = baseY + Math.sin(orbitAngle) * 22;
+                    } else {
+                        enemy.x = enemy.originX + (enemy.prepX - enemy.originX) * progress;
+                        enemy.y = enemy.originY + (enemy.prepY - enemy.originY) * progress;
+                    }
 
                     if (enemy.timer <= 0) {
                         enemy.status = 'HOLD'; 
@@ -1333,13 +1451,27 @@
                         enemy.status = 'ATTACKING';
                         enemy.timer = enemy.maxAttackTimer;
                         
-                        state.attackMarkers.push({ x: player.originX, y: player.originY, alpha: 1.0 });
                         if (enemy.attackDir === 'LONG') {
+                             state.attackMarkers.push({ x: player.originX, y: player.originY, alpha: 1.0 });
                              state.attackMarkers.push({ x: player.originX - 100, y: player.originY, alpha: 1.0 });
-                        } else if (enemy.attackDir === 'AIR_STRAIGHT' || enemy.attackDir === 'GROUND_UPPER') {
+                        } else if (enemy.attackDir === 'MID_WAVE') {
+                            state.attackMarkers.push({ x: player.originX, y: player.originY, alpha: 1.0 });
                             state.attackMarkers.push({ x: player.originX, y: player.originY - 80, alpha: 1.0 });
-                        } else if (enemy.attackDir === 'AIR_DIVE' || enemy.attackDir === 'GROUND_STRAIGHT') {
                             state.attackMarkers.push({ x: player.originX, y: player.originY + 80, alpha: 1.0 });
+                        } else if (enemy.attackDir === 'AIR_ORBIT_SWEEP') {
+                            state.attackMarkers.push({ x: player.originX, y: player.originY, alpha: 1.0 });
+                            state.attackMarkers.push({ x: player.originX, y: player.originY - 80, alpha: 1.0 });
+                            state.attackMarkers.push({ x: player.originX, y: player.originY + 80, alpha: 1.0 });
+                        } else if (enemy.attackDir === 'AIR_STRAIGHT' || enemy.attackDir === 'GROUND_UPPER') {
+                            state.attackMarkers.push({ x: player.originX, y: player.originY, alpha: 1.0 });
+                            state.attackMarkers.push({ x: player.originX, y: player.originY - 80, alpha: 1.0 });
+                            state.attackMarkers.push({ x: player.originX - 100, y: player.originY, alpha: 1.0 });
+                        } else if (enemy.attackDir === 'AIR_DIVE' || enemy.attackDir === 'GROUND_STRAIGHT') {
+                            state.attackMarkers.push({ x: player.originX, y: player.originY, alpha: 1.0 });
+                            state.attackMarkers.push({ x: player.originX, y: player.originY + 80, alpha: 1.0 });
+                            state.attackMarkers.push({ x: player.originX - 100, y: player.originY, alpha: 1.0 });
+                        } else {
+                            state.attackMarkers.push({ x: player.originX, y: player.originY, alpha: 1.0 });
                         }
                     }
                 } else if (enemy.status === 'ATTACKING') {
@@ -1352,11 +1484,19 @@
                     let targetX = player.originX - 40;
                     let targetY = player.originY;
 
-                    if (enemy.attackDir === 'LONG') targetX = player.originX - 140;
-                    else if (enemy.attackDir === 'AIR_STRAIGHT') targetY = player.originY - 80;
+                    if (
+                        enemy.attackDir === 'LONG' ||
+                        enemy.attackDir === 'AIR_STRAIGHT' ||
+                        enemy.attackDir === 'AIR_DIVE' ||
+                        enemy.attackDir === 'GROUND_STRAIGHT' ||
+                        enemy.attackDir === 'GROUND_UPPER'
+                    ) targetX = player.originX - 140;
+
+                    if (enemy.attackDir === 'AIR_STRAIGHT') targetY = player.originY - 80;
                     else if (enemy.attackDir === 'AIR_DIVE') targetY = player.originY + 40;
                     else if (enemy.attackDir === 'GROUND_STRAIGHT') targetY = player.originY + 80;
                     else if (enemy.attackDir === 'GROUND_UPPER') targetY = player.originY - 40;
+                    else if (enemy.attackDir === 'MID_WAVE') targetY = player.originY;
 
                     const movement = Math.sin(progress * Math.PI);
                     enemy.x = startX - movement * (startX - targetX);
@@ -1371,8 +1511,15 @@
                     ) {
                         let dodged = false;
                         
-                        // 공통: 뒤로 회피(DODGE_BACK)는 LONG을 제외한 공격만 회피 가능
-                        if (player.status === 'DODGE_BACK' && enemy.attackDir !== 'LONG') {
+                        // 공통: 뒤로 회피(DODGE_BACK)는 좌측까지 커버하는 공격에는 통하지 않음
+                        const blocksBackDodge = (
+                            enemy.attackDir === 'LONG' ||
+                            enemy.attackDir === 'AIR_STRAIGHT' ||
+                            enemy.attackDir === 'AIR_DIVE' ||
+                            enemy.attackDir === 'GROUND_STRAIGHT' ||
+                            enemy.attackDir === 'GROUND_UPPER'
+                        );
+                        if (player.status === 'DODGE_BACK' && !blocksBackDodge) {
                             dodged = true;
                         } else {
                             // 방향별 특수 회피 판정
@@ -1388,7 +1535,7 @@
                         }
 
                         if (!dodged) {
-                            const incomingDamage = Math.max(1, 20 - player.def);
+                            const incomingDamage = Math.max(1, enemy.attackPower - player.def);
                             player.hp -= incomingDamage;
                             state.shake = 20;
                             player.status = 'HIT';
@@ -1405,7 +1552,7 @@
                         enemy.status = 'IDLE';
                         enemy.x = enemy.originX;
                         enemy.y = enemy.originY;
-                        enemy.idleTimer = Math.max(120, 300 - (state.stage * 3)); 
+                        enemy.idleTimer = enemy.idleResetTimer;
                     }
                 }
             }
@@ -1547,23 +1694,19 @@
         function drawEnemy() {
             let ex = enemy.x; let ey = enemy.y;
             if (enemy.status === 'HOLD') {
-                let arrowX = ex - 80; let arrowY = ey - 45; 
-                drawArrow(arrowX, arrowY, enemy.attackDir, enemy.timer, true);
+                let arrowX = ex - 80; let arrowY = ey - 45;
+                if (enemy.attackDir === 'MID_WAVE' || enemy.attackDir === 'AIR_ORBIT_SWEEP') {
+                    drawArrow(arrowX, arrowY - 80, enemy.attackDir, enemy.timer, true);
+                    drawArrow(arrowX, arrowY, enemy.attackDir, enemy.timer, true);
+                    drawArrow(arrowX, arrowY + 80, enemy.attackDir, enemy.timer, true);
+                } else {
+                    drawArrow(arrowX, arrowY, enemy.attackDir, enemy.timer, true);
+                }
             }
             if (enemy.hitFlash > 0 || (enemy.status === 'HOLD' && Math.floor(Date.now() / 50) % 2 === 0)) ctx.fillStyle = 'white';
             else ctx.fillStyle = '#c0392b';
-            ctx.fillRect(ex - 35, ey - 90, 70, 90);
-            if (enemy.status === 'ATTACKING') {
-                ctx.fillStyle = '#7f8c8d'; 
-                let swordLen = 140;
-                if (enemy.attackDir === 'LONG') swordLen = 280;
-                ctx.save();
-                ctx.translate(ex, ey - 40);
-                if (enemy.attackDir === 'AIR_DIVE') ctx.rotate(Math.PI / 4); 
-                else if (enemy.attackDir === 'GROUND_UPPER') ctx.rotate(-Math.PI / 4);
-                ctx.fillRect(-swordLen, 0, swordLen, 20);
-                ctx.restore();
-            }
+            const enemySize = 80;
+            ctx.fillRect(ex - enemySize / 2, ey - enemySize, enemySize, enemySize);
         }
 
         function drawBar(x, y, w, h, ratio, color, label) {
