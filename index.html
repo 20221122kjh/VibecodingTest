@@ -890,9 +890,16 @@
                 return;
             }
 
-            // Debug shortcut: jump directly to final stage (3-5).
+            // Debug shortcut: jump directly to stage 1-5.
             if (key === 'o' || key === 'O') {
-                jumpToFinalStage();
+                if (state.mode === 'PLAY') {
+                    state.stage = 5;
+                    state.nextStageTimer = 0;
+                    resetEnemy();
+                    showMessage(`JUMP TO STAGE ${getStageLabel(5)}`, PALETTE.HIT_GOLD, 90);
+                } else {
+                    startGame(5);
+                }
                 return;
             }
 
@@ -1578,11 +1585,22 @@
                         const wave = Math.sin(progress * Math.PI * 2 * enemy.waveCycles) * 34;
                         enemy.y = enemy.originY + wave;
                     } else if (enemy.attackDir === 'AIR_ORBIT_SWEEP') {
-                        const baseX = enemy.originX + (enemy.prepX - enemy.originX) * progress;
-                        const baseY = enemy.originY + (enemy.prepY - enemy.originY) * progress;
-                        const orbitAngle = progress * Math.PI * 2 * enemy.orbitCycles;
-                        enemy.x = baseX + Math.cos(orbitAngle) * 30;
-                        enemy.y = baseY + Math.sin(orbitAngle) * 22;
+                        // 첫 번째 단계 (0~0.5): 곡선을 따라 상단으로 올라감
+                        if (progress < 0.5) {
+                            const phaseProgress = progress * 2; // 0 ~ 1
+                            // 부드러운 곡선으로 우상향 이동
+                            const curveY = -Math.sin(phaseProgress * Math.PI) * 120;
+                            const curveX = enemy.originX + phaseProgress * 90;
+                            enemy.x = curveX;
+                            enemy.y = enemy.originY + curveY;
+                        } else {
+                            // 두 번째 단계 (0.5~1.0): 최고점에서 아래로 하강
+                            const peakX = enemy.originX + 90;
+                            const peakY = enemy.originY - 120;
+                            const phaseProgress = (progress - 0.5) * 2; // 0 ~ 1
+                            enemy.x = peakX;
+                            enemy.y = peakY + phaseProgress * 120;
+                        }
                     } else {
                         enemy.x = enemy.originX + (enemy.prepX - enemy.originX) * progress;
                         enemy.y = enemy.originY + (enemy.prepY - enemy.originY) * progress;
