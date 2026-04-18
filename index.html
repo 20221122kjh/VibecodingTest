@@ -7,10 +7,16 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --game-font: 'Press Start 2P', cursive;
+        }
+        * {
+            font-family: var(--game-font) !important;
+        }
         body {
             background-color: #111;
             color: white;
-            font-family: 'Press Start 2P', cursive;
+            font-family: var(--game-font);
             margin: 0;
             display: flex;
             align-items: center;
@@ -56,14 +62,8 @@
             font-size: 18px;
             line-height: 1;
             text-align: center;
-            font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', sans-serif;
+            font-family: var(--game-font);
             transform: translate(-50%, -50%);
-        }
-        .control-item {
-            display: inline-flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
         }
         .dodge-keys {
             display: grid;
@@ -87,21 +87,6 @@
         .dodge-keys .down {
             grid-column: 2;
             grid-row: 2;
-        }
-        .control-legend {
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-            gap: 8px;
-            margin-top: 4px;
-        }
-        .control-separator {
-            display: inline-block;
-            width: 2px;
-            height: 62px;
-            background: #fff;
-            opacity: 0.95;
-            margin-bottom: 14px;
         }
         .control-label {
             font-size: 9px;
@@ -164,7 +149,7 @@
             color: #fff;
             font-size: 14px;
             line-height: 1;
-            font-family: 'Segoe UI Symbol', 'Noto Sans Symbols 2', sans-serif;
+            font-family: var(--game-font);
             font-weight: 700;
         }
         #attackPrompt {
@@ -355,17 +340,17 @@
         <div id="battleScreen" class="relative">
             <canvas id="gameCanvas" width="800" height="400"></canvas>
             <div id="dodgePrompt" aria-live="polite">
-                <div><strong>회피!</strong> 피격 직전입니다</div>
+                <div><strong>DODGE!</strong> Incoming hit!</div>
                 <div>
                     <span class="tutorial-keys" aria-hidden="true">
                         <span class="tutorial-key" data-key="↑"></span>
                         <span class="tutorial-key" data-key="←"></span>
                         <span class="tutorial-key" data-key="↓"></span>
                     </span>
-                    중 하나를 누르세요
+                    Press one of these keys
                 </div>
             </div>
-            <div id="attackPrompt" class="blink-text" aria-live="polite"><span class="tutorial-key" data-key="→" aria-hidden="true"></span>를 눌러 공격하세요!</div>
+            <div id="attackPrompt" class="blink-text" aria-live="polite"><span class="tutorial-key" data-key="→" aria-hidden="true"></span> Press to attack!</div>
             <div id="overlay" class="absolute inset-0 bg-black flex flex-col items-center justify-center p-6 text-center">
                 <div id="introPanel">
                     <h1 id="main-title" class="text-3xl mb-4">TIMING KNIGHT</h1>
@@ -409,8 +394,8 @@
             </div>
         </div>
         <div class="controls-guide">
-            로비: [1][2][3] 업그레이드, [SPACE] 시작 | 전투: [→] 공격, [↑][←][↓] 회피<br>
-            목표: 스테이지를 클리어해 골드를 모으고 로비에서 성장하세요.
+            Lobby: [1][2][3] Upgrade, [SPACE] Start | Battle: [→] Attack, [↑][←][↓] Dodge<br>
+            Goal: Clear stages, earn gold, and grow stronger in the lobby.
         </div>
     </div>
 
@@ -425,7 +410,6 @@
         const pauseContinueBtnEl = document.getElementById('pauseContinueBtn');
         const pauseLobbyBtnEl = document.getElementById('pauseLobbyBtn');
         const subTitleEl = document.getElementById('sub-title');
-        const lobbyPanelEl = document.getElementById('lobbyPanel');
         const lobbyGoldLineEl = document.getElementById('lobbyGoldLine');
         const lobbyStatLineEl = document.getElementById('lobbyStatLine');
         const lobbyNoticeLineEl = document.getElementById('lobbyNoticeLine');
@@ -437,18 +421,122 @@
         const upgradeDefBtnEl = document.getElementById('upgradeDefBtn');
         const dodgePromptEl = document.getElementById('dodgePrompt');
         const attackPromptEl = document.getElementById('attackPrompt');
+        const playerSourceImg = new Image();
+        playerSourceImg.src = 'image/player_image.png';
         const upgradeAudio = new Audio('sound/buy.mp3');
         upgradeAudio.preload = 'auto';
         upgradeAudio.volume = 0.85;
-        const insufficientGoldAudio = new Audio('sound/no_money.mp3');
+        const insufficientGoldAudio = new Audio('sound/nomoney.mp3');
         insufficientGoldAudio.preload = 'auto';
         insufficientGoldAudio.volume = 0.9;
-        const monsterKillAudio = new Audio('sound/Kill_sound.mp3');
+        const monsterKillAudio = new Audio('sound/kill.mp3');
         monsterKillAudio.preload = 'auto';
         monsterKillAudio.volume = 0.9;
         let audioCtx = null;
         let lobbyNoticeAnimTimer = null;
         let lobbyStatAnimTimer = null;
+        const extractedPlayerSprites = {
+            idle: null,
+            attack: null
+        };
+
+        function extractSpriteFromHalf(image, halfX, halfWidth) {
+            const workCanvas = document.createElement('canvas');
+            workCanvas.width = halfWidth;
+            workCanvas.height = image.naturalHeight;
+            const workCtx = workCanvas.getContext('2d', { willReadFrequently: true });
+            workCtx.imageSmoothingEnabled = false;
+            workCtx.drawImage(image, halfX, 0, halfWidth, image.naturalHeight, 0, 0, halfWidth, image.naturalHeight);
+
+            const { width, height } = workCanvas;
+            const imageData = workCtx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+
+            let minX = width;
+            let minY = height;
+            let maxX = -1;
+            let maxY = -1;
+
+            const startY = Math.floor(height * 0.18);
+            for (let y = startY; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const r = data[idx];
+                    const g = data[idx + 1];
+                    const b = data[idx + 2];
+                    const a = data[idx + 3];
+                    if (a === 0) continue;
+                    if (r > 245 && g > 245 && b > 245) continue;
+
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (x > maxX) maxX = x;
+                    if (y > maxY) maxY = y;
+                }
+            }
+
+            if (maxX < minX || maxY < minY) return null;
+
+            const pad = 0;
+            const sx = Math.max(0, minX - pad);
+            const sy = Math.max(startY, minY - pad);
+            const sw = Math.min(width - sx, (maxX - minX + 1) + (pad * 2));
+            const sh = Math.min(height - sy, (maxY - minY + 1) + (pad * 2));
+
+            const spriteCanvas = document.createElement('canvas');
+            spriteCanvas.width = sw;
+            spriteCanvas.height = sh;
+            const spriteCtx = spriteCanvas.getContext('2d');
+            spriteCtx.imageSmoothingEnabled = false;
+            spriteCtx.drawImage(workCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+            const spriteData = spriteCtx.getImageData(0, 0, sw, sh);
+            const px = spriteData.data;
+            for (let i = 0; i < px.length; i += 4) {
+                const r = px[i];
+                const g = px[i + 1];
+                const b = px[i + 2];
+                if (r > 228 && g > 228 && b > 228) {
+                    px[i + 3] = 0;
+                }
+            }
+            spriteCtx.putImageData(spriteData, 0, 0);
+
+            let trimMinX = sw;
+            let trimMinY = sh;
+            let trimMaxX = -1;
+            let trimMaxY = -1;
+            const trimmed = spriteCtx.getImageData(0, 0, sw, sh).data;
+            for (let y = 0; y < sh; y++) {
+                for (let x = 0; x < sw; x++) {
+                    const idx = (y * sw + x) * 4;
+                    if (trimmed[idx + 3] > 0) {
+                        if (x < trimMinX) trimMinX = x;
+                        if (y < trimMinY) trimMinY = y;
+                        if (x > trimMaxX) trimMaxX = x;
+                        if (y > trimMaxY) trimMaxY = y;
+                    }
+                }
+            }
+
+            if (trimMaxX < trimMinX || trimMaxY < trimMinY) return spriteCanvas;
+
+            const tw = trimMaxX - trimMinX + 1;
+            const th = trimMaxY - trimMinY + 1;
+            const tightCanvas = document.createElement('canvas');
+            tightCanvas.width = tw;
+            tightCanvas.height = th;
+            const tightCtx = tightCanvas.getContext('2d');
+            tightCtx.imageSmoothingEnabled = false;
+            tightCtx.drawImage(spriteCanvas, trimMinX, trimMinY, tw, th, 0, 0, tw, th);
+            return tightCanvas;
+        }
+
+        playerSourceImg.onload = () => {
+            const halfWidth = Math.floor(playerSourceImg.naturalWidth / 2);
+            extractedPlayerSprites.idle = extractSpriteFromHalf(playerSourceImg, 0, halfWidth);
+            extractedPlayerSprites.attack = extractSpriteFromHalf(playerSourceImg, halfWidth, playerSourceImg.naturalWidth - halfWidth);
+        };
 
         function drawPixelIcon(canvasId, pattern) {
             const iconCanvas = document.getElementById(canvasId);
@@ -537,12 +625,16 @@
         }
 
         function playHitSfx() {
+            playHitSfxFallback();
+        }
+
+        function playHitSfxFallback() {
             const ac = getAudioContext();
             if (!ac) return;
 
             const now = ac.currentTime;
             const master = ac.createGain();
-            master.gain.setValueAtTime(0.18, now);
+            master.gain.setValueAtTime(0.60, now);
             master.connect(ac.destination);
 
             const oscA = ac.createOscillator();
@@ -678,24 +770,16 @@
         };
 
         const GAME_CONFIG = {
-            TOTAL_STAGES: 15,
-            STAGES_PER_WORLD: 5,
+            TOTAL_STAGES: 10,
+            STAGES_PER_WORLD: 10,
             MONSTERS_PER_STAGE: 5
         };
 
         const UPGRADE_CONFIG = {
-            hp: { baseCost: 40, costGrowth: 30, amount: 20, maxLevel: 10, label: '체력' },
-            atk: { baseCost: 50, costGrowth: 35, amount: 5, maxLevel: 10, label: '공격력' },
-            def: { baseCost: 45, costGrowth: 30, amount: 2, maxLevel: 10, label: '방어력' }
+            hp: { baseCost: 40, costGrowth: 30, amount: 20, maxLevel: 10, label: 'HP' },
+            atk: { baseCost: 50, costGrowth: 35, amount: 5, maxLevel: 10, label: 'ATK' },
+            def: { baseCost: 45, costGrowth: 30, amount: 2, maxLevel: 10, label: 'DEF' }
         };
-
-        function isBossStage(stage = state.stage) {
-            return stage % GAME_CONFIG.MONSTERS_PER_STAGE === 0;
-        }
-
-        function isFinalBossStage(stage = state.stage) {
-            return stage === GAME_CONFIG.TOTAL_STAGES;
-        }
 
         function getEnemyProfile(stage = state.stage) {
             const baseHp = 80 + (stage * 40);
@@ -725,11 +809,11 @@
                 };
             }
 
-            if (isFinalBossStage(stage)) {
+            if (isWorldBossStage(stage)) {
                 profile = {
-                    hp: Math.floor(profile.hp * 1.8),
-                    damage: profile.damage + 12,
-                    idleTimer: Math.max(70, profile.idleTimer - 20),
+                    hp: Math.floor(profile.hp * 1.75),
+                    damage: profile.damage + 10,
+                    idleTimer: Math.max(75, profile.idleTimer - 18),
                     preparingTimer: basePreparingTimer,
                     holdTimer: baseHoldTimer,
                     attackTimer: baseAttackTimer
@@ -759,6 +843,7 @@
             messageTimer: 0,
             messageColor: '#ffffff',
             lobbyNotice: '',
+            floatTexts: [],
             tutorial: {
                 hasPlayedOnce: false,
                 hasTriggeredFirstAttackCue: false,
@@ -773,9 +858,9 @@
         };
 
         const player = {
-            originX: 120,
+            originX: 150,
             originY: 300,
-            x: 120, y: 300,
+            x: 150, y: 300,
             hp: 100, maxHp: 100,
             def: 0,
             atk: 25, 
@@ -792,9 +877,9 @@
         };
 
         const enemy = {
-            originX: 680,
+            originX: 650,
             originY: 300,
-            x: 680, y: 300,
+            x: 650, y: 300,
             hp: 100, maxHp: 100,
             attackPower: 20,
             status: 'IDLE',
@@ -809,9 +894,12 @@
             idleTimer: 300, 
             idleResetTimer: 300,
             maxAttackTimer: 25,    
+            maxReturnTimer: 36,
             hasDealtDamage: false,
-            prepX: 680,
+            prepX: 650,
             prepY: 300,
+            returnStartX: 650,
+            returnStartY: 300,
             hitFlash: 0
         };
 
@@ -829,41 +917,21 @@
             return stageNumber % GAME_CONFIG.MONSTERS_PER_STAGE === 0;
         }
 
-        function isFinalBossStage(stageNumber = state.stage) {
-            return stageNumber === GAME_CONFIG.TOTAL_STAGES;
+        function isWorldBossStage(stageNumber = state.stage) {
+            return stageNumber % GAME_CONFIG.STAGES_PER_WORLD === 0;
         }
 
-        function getEnemyDifficultyProfile(stageNumber = state.stage) {
-            if (isFinalBossStage(stageNumber)) {
-                return {
-                    hpMultiplier: 2.35,
-                    damageMultiplier: 1.9,
-                    idleMultiplier: 0.55,
-                    preparingMultiplier: 0.8,
-                    holdMultiplier: 0.78,
-                    attackMultiplier: 0.8
-                };
-            }
+        function isFinalBossStage(stageNumber = state.stage) {
+            return false;
+        }
 
-            if (isBossStage(stageNumber)) {
-                return {
-                    hpMultiplier: 1.55,
-                    damageMultiplier: 1.35,
-                    idleMultiplier: 0.72,
-                    preparingMultiplier: 0.85,
-                    holdMultiplier: 0.82,
-                    attackMultiplier: 0.82
-                };
-            }
+        function getAttackPatternsForStage(stageNumber = state.stage) {
+            if (stageNumber === 1) return ['MID'];
+            if (stageNumber === 2) return ['MID', 'MID_WAVE'];
+            if (stageNumber === 3) return ['AIR_STRAIGHT', 'GROUND_STRAIGHT'];
+            if (stageNumber === 4) return ['AIR_DIVE', 'GROUND_UPPER', 'LONG', 'AIR_ORBIT_SWEEP'];
 
-            return {
-                hpMultiplier: 1,
-                damageMultiplier: 1,
-                idleMultiplier: 1,
-                preparingMultiplier: 1,
-                holdMultiplier: 1,
-                attackMultiplier: 1
-            };
+            return ['MID_WAVE', 'AIR_STRAIGHT', 'AIR_DIVE', 'GROUND_STRAIGHT', 'GROUND_UPPER', 'LONG', 'AIR_ORBIT_SWEEP'];
         }
 
         window.addEventListener('keydown', (e) => {
@@ -1000,6 +1068,7 @@
             state.particles = [];
             state.afterimages = [];
             state.attackMarkers = [];
+            state.floatTexts = [];
             state.messageText = '';
             state.messageTimer = 0;
             state.messageColor = '#ffffff';
@@ -1043,6 +1112,7 @@
             state.particles = [];
             state.afterimages = [];
             state.attackMarkers = [];
+            state.floatTexts = [];
             state.messageTimer = 0;
 
             state.tutorial.hasPlayedOnce = true;
@@ -1097,6 +1167,7 @@
             state.cameraTargetZoom = 1;
             state.cameraTargetFocusX = canvas.width / 2;
             state.cameraTargetFocusY = canvas.height / 2;
+            state.floatTexts = [];
             battleScreenEl.style.display = 'none';
             lobbyScreenEl.style.display = 'block';
             pausePanelEl.style.display = 'none';
@@ -1150,6 +1221,7 @@
             enemy.preparingDuration = enemy.maxPreparingTimer;
             enemy.maxHoldTimer = profile.holdTimer;
             enemy.maxAttackTimer = profile.attackTimer;
+            enemy.maxReturnTimer = Math.round(profile.attackTimer * 1.45);
             enemy.idleResetTimer = profile.idleTimer;
             enemy.idleTimer = enemy.idleResetTimer;
 =======
@@ -1167,6 +1239,8 @@
             enemy.orbitCycles = 0;
             enemy.hasDealtDamage = false;
             enemy.hitFlash = 0;
+            enemy.returnStartX = enemy.originX;
+            enemy.returnStartY = enemy.originY;
             state.nextStageTimer = 0;
 
             if (state.stage !== 1) {
@@ -1259,6 +1333,9 @@
             }
         }
 
+        function createDodgeSuccessEffect(x, y) {
+        }
+
         function getUpgradeCost(type) {
             const cfg = UPGRADE_CONFIG[type];
             const level = player[`${type}Level`];
@@ -1269,6 +1346,23 @@
             state.messageText = text;
             state.messageColor = color;
             state.messageTimer = duration;
+        }
+
+        function createFloatingText(text, x, y, color = '#ffffff', duration = 30, options = {}) {
+            state.floatTexts.push({
+                text,
+                x,
+                y,
+                color,
+                life: duration,
+                maxLife: duration,
+                vy: options.vy ?? -0.35,
+                noMove: options.noMove ?? false,
+                size: options.size ?? 10,
+                align: options.align ?? 'center',
+                weight: options.weight ?? 'normal',
+                noStroke: options.noStroke ?? false
+            });
         }
 
         function emphasizeInsufficientGoldNotice() {
@@ -1302,16 +1396,16 @@
             const cfg = UPGRADE_CONFIG[type];
             const levelKey = `${type}Level`;
             if (player[levelKey] >= cfg.maxLevel) {
-                state.lobbyNotice = `${cfg.label} 업그레이드 최대`;
-                showMessage(`${cfg.label} 업그레이드 최대`, '#f1c40f', 70);
+                state.lobbyNotice = `${cfg.label} upgrade maxed`;
+                showMessage(`${cfg.label} upgrade maxed`, '#f1c40f', 70);
                 if (state.mode === 'LOBBY') updateLobbyOverlay();
                 return;
             }
 
             const cost = getUpgradeCost(type);
             if (state.gold < cost) {
-                state.lobbyNotice = `골드 부족 (${cost}G 필요)`;
-                showMessage(`골드 부족 (${cost}G 필요)`, '#e74c3c', 70);
+                state.lobbyNotice = `Not enough gold (${cost}G needed)`;
+                showMessage(`Not enough gold (${cost}G needed)`, '#e74c3c', 70);
                 playInsufficientGoldSfx();
                 if (state.mode === 'LOBBY') {
                     updateLobbyOverlay();
@@ -1366,6 +1460,7 @@
 
         function checkHit() {
             if (enemy.hp <= 0) return;
+            if (enemy.status === 'PREPARING' || enemy.status === 'HOLD') return;
             if (tryFinalBossDodgeOnPlayerAttack()) return;
             playHitSfx();
             enemy.hp -= player.atk;
@@ -1377,7 +1472,14 @@
                 playMonsterKillSfx();
                 const reward = 30 + (state.stage * 20);
                 state.gold += reward;
-                showMessage(`+${reward} GOLD`, PALETTE.HIT_GOLD, 90);
+                createFloatingText(`+${reward}`, 78, 84, PALETTE.HIT_GOLD, 42, {
+                    vy: 0,
+                    noMove: true,
+                    size: 10,
+                    align: 'center',
+                    weight: 'normal',
+                    noStroke: true
+                });
                 state.nextStageTimer = 60; 
             }
         }
@@ -1403,6 +1505,13 @@
             if (enemy.dodgeCooldown > 0) enemy.dodgeCooldown = Math.max(0, enemy.dodgeCooldown - dt);
             if (enemy.hitFlash > 0) enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
             if (state.messageTimer > 0) state.messageTimer = Math.max(0, state.messageTimer - dt);
+
+            for (let i = state.floatTexts.length - 1; i >= 0; i--) {
+                const text = state.floatTexts[i];
+                text.life -= dt;
+                if (!text.noMove) text.y += text.vy * dt;
+                if (text.life <= 0) state.floatTexts.splice(i, 1);
+            }
 
             if (
                 state.stage === 1 &&
@@ -1521,25 +1630,14 @@
                         if (enemy.idleTimer <= 0) {
                             enemy.status = 'PREPARING';
                             enemy.hasDealtDamage = false;
-                            
-                            let patterns = [];
-                            if (state.stage === 1) {
-                                patterns = ['MID'];
-                            } else if (state.stage === 2) {
-                                patterns = ['MID', 'MID_WAVE'];
-                            } else if (state.stage === 3) {
-                                patterns = ['AIR_STRAIGHT', 'GROUND_STRAIGHT'];
-                            } else if (state.stage === 4) {
-                                patterns = ['AIR_DIVE', 'GROUND_UPPER', 'LONG', 'AIR_ORBIT_SWEEP'];
-                            } else if (state.stage === 5) {
-                                patterns = ['MID_WAVE', 'AIR_STRAIGHT', 'AIR_DIVE', 'GROUND_STRAIGHT', 'GROUND_UPPER', 'LONG', 'AIR_ORBIT_SWEEP'];
-                            }
-                            enemy.attackDir = patterns[Math.floor(Math.random() * patterns.length)];
+
+                            const patterns = getAttackPatternsForStage(state.stage);
+                            enemy.attackDir = patterns[Math.floor(Math.random() * patterns.length)] || 'MID';
 
                             if (enemy.attackDir === 'MID_WAVE') {
                                 const waveOffsets = [0, -80, 80];
                                 enemy.waveOffset = waveOffsets[Math.floor(Math.random() * waveOffsets.length)];
-                                enemy.waveCycles = Math.random() < 0.5 ? 2 : 3;
+                                enemy.waveCycles = 2;
                                 enemy.orbitCycles = 0;
                                 enemy.preparingDuration = Math.floor(enemy.maxPreparingTimer * 2.2);
                             } else if (enemy.attackDir === 'AIR_ORBIT_SWEEP') {
@@ -1675,7 +1773,8 @@
                     else if (enemy.attackDir === 'GROUND_UPPER') targetY = player.originY - 40;
                     else if (enemy.attackDir === 'MID_WAVE') targetY = player.originY;
 
-                    const movement = Math.sin(progress * Math.PI);
+                    // Attack phase only advances toward the target; returning is handled separately.
+                    const movement = Math.sin(Math.min(1, progress / 0.7) * (Math.PI / 2));
                     enemy.x = startX - movement * (startX - targetX);
                     enemy.y = startY - movement * (startY - targetY);
 
@@ -1727,12 +1826,32 @@
                             if (player.hp <= 0) gameOver();
                         } else {
                             enemy.hasDealtDamage = true; 
+                            state.shake = 4;
+                            createFloatingText('DODGE!', player.x + 10, player.y - 78, '#ffffff', 28, {
+                                vy: 0,
+                                noMove: true,
+                                size: 10,
+                                align: 'center',
+                                weight: 'normal',
+                                noStroke: true
+                            });
                         }
                     }
 
                     if (enemy.timer <= 0) {
-                        const difficulty = getEnemyDifficultyProfile();
-                        const baseIdleTimer = Math.max(120, 300 - (state.stage * 3));
+                        enemy.returnStartX = enemy.x;
+                        enemy.returnStartY = enemy.y;
+                        enemy.status = 'RETURNING';
+                        enemy.timer = enemy.maxReturnTimer;
+                    }
+                } else if (enemy.status === 'RETURNING') {
+                    enemy.timer -= dt;
+                    const returnProgress = 1 - Math.max(0, enemy.timer / enemy.maxReturnTimer);
+                    const eased = 1 - Math.pow(1 - returnProgress, 2);
+                    enemy.x = enemy.returnStartX + (enemy.originX - enemy.returnStartX) * eased;
+                    enemy.y = enemy.returnStartY + (enemy.originY - enemy.returnStartY) * eased;
+
+                    if (enemy.timer <= 0) {
                         enemy.status = 'IDLE';
                         enemy.x = enemy.originX;
                         enemy.y = enemy.originY;
@@ -1774,18 +1893,42 @@
         }
 
         function drawPixelSprite(ctx, x, y, size, status, customAlpha = 1.0) {
+            const sprite = status === 'ATTACK' ? extractedPlayerSprites.attack : extractedPlayerSprites.idle;
             ctx.globalAlpha = customAlpha;
             const isCooldown = player.dodgeCooldown > 0 && player.status === 'IDLE';
-            const bodySize = size * 0.78;
-            const ox = x - bodySize / 2;
-            const oy = y - bodySize;
-            if (status === 'HIT') ctx.fillStyle = '#ffffff';
-            else if (isCooldown) ctx.fillStyle = '#2c3e50';
-            else ctx.fillStyle = '#2d7ff9';
-            ctx.fillRect(ox, oy, bodySize, bodySize);
-            ctx.strokeStyle = '#d6e8ff';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(ox, oy, bodySize, bodySize);
+            ctx.save();
+            ctx.imageSmoothingEnabled = false;
+
+            if (sprite) {
+                const baseHeight = size * 0.72;
+                const scale = baseHeight / sprite.height;
+                const drawWidth = sprite.width * scale;
+                const drawHeight = sprite.height * scale;
+                const drawX = x - drawWidth / 2;
+                const drawY = y - drawHeight;
+                ctx.drawImage(sprite, drawX, drawY, drawWidth, drawHeight);
+            } else {
+                const bodySize = size * 0.78;
+                const ox = x - bodySize / 2;
+                const oy = y - bodySize;
+                if (status === 'HIT') ctx.fillStyle = '#ffffff';
+                else if (isCooldown) ctx.fillStyle = '#2c3e50';
+                else ctx.fillStyle = '#2d7ff9';
+                ctx.fillRect(ox, oy, bodySize, bodySize);
+                ctx.strokeStyle = '#d6e8ff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(ox, oy, bodySize, bodySize);
+            }
+
+            if (status === 'HIT') {
+                const bodySize = size * 0.78;
+                const ox = x - bodySize / 2;
+                const oy = y - bodySize;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+                ctx.fillRect(ox, oy, bodySize, bodySize);
+            }
+
+            ctx.restore();
             ctx.globalAlpha = 1.0;
         }
 
@@ -1852,7 +1995,7 @@
             ctx.font = '10px "Press Start 2P"';
             ctx.textAlign = 'start';
             ctx.fillText(`GOLD ${state.gold}`, 20, 95);
-            drawBar(20, 50, 180, 12, player.hp / player.maxHp, '#2ecc71', 'HERO HP');
+            drawBar(20, 30, 180, 12, player.hp / player.maxHp, '#2ecc71', 'PLAYER HP');
             if (player.dodgeCooldown > 0) drawBar(20, 70, 60, 6, 1 - (player.dodgeCooldown / player.maxDodgeCooldown), '#9b59b6', 'DODGE');
             const enemyHpLabel = isBossStage() ? 'BOSS HP' : 'MONSTER HP';
             if (enemy.hp > 0 || state.nextStageTimer > 0) drawBar(canvas.width - 200, 30, 180, 12, enemy.hp / enemy.maxHp, '#e74c3c', enemyHpLabel);
@@ -1868,6 +2011,23 @@
                 }
             });
             ctx.globalAlpha = 1.0;
+
+            state.floatTexts.forEach(text => {
+                const alpha = Math.max(0, Math.min(1, text.life / text.maxLife));
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = text.color;
+                ctx.font = `${text.weight} ${text.size}px "Press Start 2P"`;
+                ctx.textAlign = text.align;
+                ctx.fillText(text.text, text.x, text.y);
+                if (!text.noStroke) {
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+                    ctx.lineWidth = 3;
+                    ctx.strokeText(text.text, text.x, text.y);
+                }
+                ctx.restore();
+            });
+
             state.attackMarkers.forEach(marker => drawAttackX(marker.x, marker.y, marker.alpha));
 
             if (state.messageTimer > 0) {
@@ -1910,7 +2070,7 @@
             ctx.fillStyle = PALETTE.DARK; ctx.fillRect(x, y, w, h);
             ctx.fillStyle = color; ctx.fillRect(x, y, w * Math.max(0, ratio), h);
             ctx.strokeStyle = 'white'; ctx.strokeRect(x, y, w, h);
-            ctx.fillStyle = PALETTE.DARK; ctx.font = '7px "Press Start 2P"'; ctx.fillText(label, x, y - 5);
+            ctx.fillStyle = PALETTE.DARK; ctx.font = '10px "Press Start 2P"'; ctx.fillText(label, x, y - 5);
         }
 
         upgradeHpBtnEl.addEventListener('click', () => {
