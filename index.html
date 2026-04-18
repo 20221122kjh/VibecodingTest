@@ -1203,20 +1203,12 @@
         }
 
         function resetEnemy() {
-<<<<<<< HEAD
             const profile = getEnemyProfile(state.stage);
             enemy.maxHp = profile.hp;
-=======
-            const difficulty = getEnemyDifficultyProfile();
-            const baseMaxHp = 80 + (state.stage * 40);
-            const baseIdleTimer = Math.max(120, 300 - (state.stage * 3));
-            enemy.maxHp = Math.round(baseMaxHp * difficulty.hpMultiplier);
->>>>>>> 51338a4 (increase total stages to 15; implement stage labeling and boss difficulty profiles; add debug shortcut for final stage)
             enemy.hp = enemy.maxHp;
             enemy.attackPower = profile.damage;
             enemy.status = 'IDLE';
             enemy.timer = 0;
-<<<<<<< HEAD
             enemy.maxPreparingTimer = profile.preparingTimer;
             enemy.preparingDuration = enemy.maxPreparingTimer;
             enemy.maxHoldTimer = profile.holdTimer;
@@ -1224,14 +1216,6 @@
             enemy.maxReturnTimer = Math.round(profile.attackTimer * 1.45);
             enemy.idleResetTimer = profile.idleTimer;
             enemy.idleTimer = enemy.idleResetTimer;
-=======
-            enemy.maxPreparingTimer = Math.max(20, Math.round(45 * difficulty.preparingMultiplier));
-            enemy.maxHoldTimer = Math.max(24, Math.round(55 * difficulty.holdMultiplier));
-            enemy.maxAttackTimer = Math.max(12, Math.round(25 * difficulty.attackMultiplier));
-            enemy.idleTimer = Math.max(60, Math.round(baseIdleTimer * difficulty.idleMultiplier));
-            enemy.damageMultiplier = difficulty.damageMultiplier;
-            enemy.dodgeCooldown = 0;
->>>>>>> 51338a4 (increase total stages to 15; implement stage labeling and boss difficulty profiles; add debug shortcut for final stage)
             enemy.x = enemy.originX;
             enemy.y = enemy.originY;
             enemy.waveOffset = 0;
@@ -1811,12 +1795,7 @@
                         }
 
                         if (!dodged) {
-<<<<<<< HEAD
                             const incomingDamage = Math.max(1, enemy.attackPower - player.def);
-=======
-                            const baseIncomingDamage = Math.max(1, 20 - player.def);
-                            const incomingDamage = Math.max(1, Math.round(baseIncomingDamage * enemy.damageMultiplier));
->>>>>>> 51338a4 (increase total stages to 15; implement stage labeling and boss difficulty profiles; add debug shortcut for final stage)
                             player.hp -= incomingDamage;
                             state.shake = 20;
                             player.status = 'HIT';
@@ -1855,11 +1834,7 @@
                         enemy.status = 'IDLE';
                         enemy.x = enemy.originX;
                         enemy.y = enemy.originY;
-<<<<<<< HEAD
                         enemy.idleTimer = enemy.idleResetTimer;
-=======
-                        enemy.idleTimer = Math.max(60, Math.round(baseIdleTimer * difficulty.idleMultiplier));
->>>>>>> 51338a4 (increase total stages to 15; implement stage labeling and boss difficulty profiles; add debug shortcut for final stage)
                     }
                 }
             }
