@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>timing knight</title>
+    <title>Timing Slime</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
@@ -151,6 +151,16 @@
             line-height: 1;
             font-family: var(--game-font);
             font-weight: 700;
+        }
+        .tutorial-key[data-key="↑"]::before,
+        .tutorial-key[data-key="←"]::before,
+        .tutorial-key[data-key="↓"]::before,
+        .tutorial-key[data-key="→"]::before {
+            font-family: "Arial Black", "Segoe UI Symbol", sans-serif;
+            font-weight: 900;
+            font-size: 18px;
+            transform: translate(-50%, -52%);
+            text-shadow: 0.6px 0 #fff, -0.6px 0 #fff, 0 0.6px #fff, 0 -0.6px #fff;
         }
         #attackPrompt {
             position: absolute;
@@ -353,7 +363,7 @@
             <div id="attackPrompt" class="blink-text" aria-live="polite"><span class="tutorial-key" data-key="→" aria-hidden="true"></span> Press to attack!</div>
             <div id="overlay" class="absolute inset-0 bg-black flex flex-col items-center justify-center p-6 text-center">
                 <div id="introPanel">
-                    <h1 id="main-title" class="text-3xl mb-4">TIMING KNIGHT</h1>
+                    <h1 id="main-title" class="text-3xl mb-4">TIMING SLIME</h1>
                     <p id="sub-title" class="text-[10px] text-gray-400 mt-6 blink-text">PRESS SPACE TO START</p>
                 </div>
                 <div id="pausePanel" class="pause-panel" aria-live="polite">
@@ -393,10 +403,6 @@
                 </div>
             </div>
         </div>
-        <div class="controls-guide">
-            Lobby: [1][2][3] Upgrade, [SPACE] Start | Battle: [→] Attack, [↑][←][↓] Dodge<br>
-            Goal: Clear stages, earn gold, and grow stronger in the lobby.
-        </div>
     </div>
 
     <script>
@@ -423,6 +429,14 @@
         const attackPromptEl = document.getElementById('attackPrompt');
         const playerSourceImg = new Image();
         playerSourceImg.src = 'image/player_image.png';
+        const stage1MonsterImg = new Image();
+        stage1MonsterImg.src = 'image/1-1.png';
+        const stage2MonsterImg = new Image();
+        stage2MonsterImg.src = 'image/1-2.png';
+        const bossMidImg = new Image();
+        bossMidImg.src = 'image/boss_mid.png';
+        const bossFinalImg = new Image();
+        bossFinalImg.src = 'image/boss_final.png';
         const upgradeAudio = new Audio('sound/buy.mp3');
         upgradeAudio.preload = 'auto';
         upgradeAudio.volume = 0.85;
@@ -538,6 +552,263 @@
             extractedPlayerSprites.attack = extractSpriteFromHalf(playerSourceImg, halfWidth, playerSourceImg.naturalWidth - halfWidth);
         };
 
+        function removeWhiteBackground(image, options = {}) {
+            const aggressive = options.aggressive === true;
+            const canvas = document.createElement('canvas');
+            canvas.width = image.naturalWidth;
+            canvas.height = image.naturalHeight;
+            const workCtx = canvas.getContext('2d', { willReadFrequently: true });
+            workCtx.imageSmoothingEnabled = false;
+            workCtx.drawImage(image, 0, 0);
+
+            const w = canvas.width;
+            const h = canvas.height;
+            const imageData = workCtx.getImageData(0, 0, w, h);
+            const data = imageData.data;
+
+            function idxAt(x, y) {
+                return (y * w + x) * 4;
+            }
+
+            function colorDistSq(r1, g1, b1, r2, g2, b2) {
+                const dr = r1 - r2;
+                const dg = g1 - g2;
+                const db = b1 - b2;
+                return (dr * dr) + (dg * dg) + (db * db);
+            }
+
+            // 1) Very bright background removal.
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                if (r > 228 && g > 228 && b > 228) {
+                    data[i + 3] = 0;
+                }
+            }
+
+            // 2) Remove border-connected background (handles checker gray + light flat backdrops).
+            const cornerSamples = [
+                [data[idxAt(0, 0)], data[idxAt(0, 0) + 1], data[idxAt(0, 0) + 2]],
+                [data[idxAt(w - 1, 0)], data[idxAt(w - 1, 0) + 1], data[idxAt(w - 1, 0) + 2]],
+                [data[idxAt(0, h - 1)], data[idxAt(0, h - 1) + 1], data[idxAt(0, h - 1) + 2]],
+                [data[idxAt(w - 1, h - 1)], data[idxAt(w - 1, h - 1) + 1], data[idxAt(w - 1, h - 1) + 2]]
+            ];
+            const toleranceSq = 86 * 86;
+
+            function isLikelyBg(r, g, b) {
+                let nearCorner = false;
+                for (let s = 0; s < cornerSamples.length; s++) {
+                    const cr = cornerSamples[s][0];
+                    const cg = cornerSamples[s][1];
+                    const cb = cornerSamples[s][2];
+                    if (colorDistSq(r, g, b, cr, cg, cb) <= toleranceSq) {
+                        nearCorner = true;
+                        break;
+                    }
+                }
+
+                const maxCh = Math.max(r, g, b);
+                const minCh = Math.min(r, g, b);
+                const avg = (r + g + b) / 3;
+                const lowSaturation = (maxCh - minCh) <= 46;
+                const brightEnough = avg >= 145;
+                return nearCorner || (lowSaturation && brightEnough);
+            }
+
+            const visited = new Uint8Array(w * h);
+            const queue = new Int32Array(w * h * 2);
+            let qHead = 0;
+            let qTail = 0;
+
+            function pushSeed(x, y) {
+                const pos = (y * w) + x;
+                if (!visited[pos]) {
+                    queue[qTail++] = x;
+                    queue[qTail++] = y;
+                }
+            }
+
+            for (let x = 0; x < w; x++) {
+                pushSeed(x, 0);
+                pushSeed(x, h - 1);
+            }
+            for (let y = 1; y < h - 1; y++) {
+                pushSeed(0, y);
+                pushSeed(w - 1, y);
+            }
+
+            while (qHead < qTail) {
+                const x = queue[qHead++];
+                const y = queue[qHead++];
+                const pos = (y * w) + x;
+                if (visited[pos]) continue;
+                visited[pos] = 1;
+
+                const i = idxAt(x, y);
+                if (data[i + 3] === 0) continue;
+
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                if (!isLikelyBg(r, g, b)) continue;
+
+                data[i + 3] = 0;
+
+                if (x > 0) {
+                    queue[qTail++] = x - 1;
+                    queue[qTail++] = y;
+                }
+                if (x < w - 1) {
+                    queue[qTail++] = x + 1;
+                    queue[qTail++] = y;
+                }
+                if (y > 0) {
+                    queue[qTail++] = x;
+                    queue[qTail++] = y - 1;
+                }
+                if (y < h - 1) {
+                    queue[qTail++] = x;
+                    queue[qTail++] = y + 1;
+                }
+            }
+
+            // 2.5) Defringe: remove bright/gray halo pixels touching transparent area.
+            const passData = new Uint8ClampedArray(data);
+            function hasTransparentNeighbor(x, y) {
+                for (let ny = Math.max(0, y - 1); ny <= Math.min(h - 1, y + 1); ny++) {
+                    for (let nx = Math.max(0, x - 1); nx <= Math.min(w - 1, x + 1); nx++) {
+                        if (nx === x && ny === y) continue;
+                        const ni = idxAt(nx, ny);
+                        if (passData[ni + 3] === 0) return true;
+                    }
+                }
+                return false;
+            }
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const i = idxAt(x, y);
+                    const a = passData[i + 3];
+                    if (a === 0) continue;
+                    if (!hasTransparentNeighbor(x, y)) continue;
+
+                    const r = passData[i];
+                    const g = passData[i + 1];
+                    const b = passData[i + 2];
+                    const maxCh = Math.max(r, g, b);
+                    const minCh = Math.min(r, g, b);
+                    const avg = (r + g + b) / 3;
+                    const lowSaturation = (maxCh - minCh) <= 52;
+                    const nearWhite = avg >= 150;
+                    const closeToCorner = colorDistSq(r, g, b, cornerSamples[0][0], cornerSamples[0][1], cornerSamples[0][2]) <= (92 * 92)
+                        || colorDistSq(r, g, b, cornerSamples[1][0], cornerSamples[1][1], cornerSamples[1][2]) <= (92 * 92)
+                        || colorDistSq(r, g, b, cornerSamples[2][0], cornerSamples[2][1], cornerSamples[2][2]) <= (92 * 92)
+                        || colorDistSq(r, g, b, cornerSamples[3][0], cornerSamples[3][1], cornerSamples[3][2]) <= (92 * 92);
+
+                    if ((lowSaturation && nearWhite) || closeToCorner || a < 96) {
+                        data[i + 3] = 0;
+                    }
+                }
+            }
+
+            if (aggressive) {
+                const pass2 = new Uint8ClampedArray(data);
+                for (let y = 0; y < h; y++) {
+                    for (let x = 0; x < w; x++) {
+                        const i = idxAt(x, y);
+                        const a = pass2[i + 3];
+                        if (a === 0) continue;
+
+                        let touchesTransparent = false;
+                        for (let ny = Math.max(0, y - 1); ny <= Math.min(h - 1, y + 1); ny++) {
+                            for (let nx = Math.max(0, x - 1); nx <= Math.min(w - 1, x + 1); nx++) {
+                                if (nx === x && ny === y) continue;
+                                const ni = idxAt(nx, ny);
+                                if (pass2[ni + 3] === 0) {
+                                    touchesTransparent = true;
+                                    break;
+                                }
+                            }
+                            if (touchesTransparent) break;
+                        }
+                        if (!touchesTransparent) continue;
+
+                        const r = pass2[i];
+                        const g = pass2[i + 1];
+                        const b = pass2[i + 2];
+                        const avg = (r + g + b) / 3;
+                        const spread = Math.max(r, g, b) - Math.min(r, g, b);
+                        if ((avg >= 135 && spread <= 68) || a < 140) {
+                            data[i + 3] = 0;
+                        }
+                    }
+                }
+            }
+
+            workCtx.putImageData(imageData, 0, 0);
+
+            // 3) Trim transparent margins so only sprite bounds remain.
+            const trimmedData = workCtx.getImageData(0, 0, w, h).data;
+            let minX = w;
+            let minY = h;
+            let maxX = -1;
+            let maxY = -1;
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4;
+                    if (trimmedData[i + 3] > 0) {
+                        if (x < minX) minX = x;
+                        if (y < minY) minY = y;
+                        if (x > maxX) maxX = x;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+
+            if (maxX < minX || maxY < minY) return canvas;
+
+            const tw = maxX - minX + 1;
+            const th = maxY - minY + 1;
+            const tightCanvas = document.createElement('canvas');
+            tightCanvas.width = tw;
+            tightCanvas.height = th;
+            const tightCtx = tightCanvas.getContext('2d');
+            tightCtx.imageSmoothingEnabled = false;
+            tightCtx.drawImage(canvas, minX, minY, tw, th, 0, 0, tw, th);
+            return tightCanvas;
+        }
+
+        function processBossImage(image, options = {}) {
+            image.cleanedCanvas = removeWhiteBackground(image, options);
+        }
+
+        function processStage1MonsterImage(image) {
+            image.cleanedCanvas = removeWhiteBackground(image, { aggressive: true });
+        }
+
+        stage1MonsterImg.onload = () => {
+            processStage1MonsterImage(stage1MonsterImg);
+        };
+
+        stage2MonsterImg.onload = () => {
+            processStage1MonsterImage(stage2MonsterImg);
+        };
+
+        bossMidImg.onload = () => {
+            processBossImage(bossMidImg, { aggressive: false });
+        };
+
+        bossFinalImg.onload = () => {
+            processBossImage(bossFinalImg, { aggressive: true });
+        };
+
+        // Handle cached images that may already be complete before onload handlers fire.
+        if (stage1MonsterImg.complete && stage1MonsterImg.naturalWidth > 0) processStage1MonsterImage(stage1MonsterImg);
+        if (stage2MonsterImg.complete && stage2MonsterImg.naturalWidth > 0) processStage1MonsterImage(stage2MonsterImg);
+        if (bossMidImg.complete && bossMidImg.naturalWidth > 0) processBossImage(bossMidImg, { aggressive: false });
+        if (bossFinalImg.complete && bossFinalImg.naturalWidth > 0) processBossImage(bossFinalImg, { aggressive: true });
+
         function drawPixelIcon(canvasId, pattern) {
             const iconCanvas = document.getElementById(canvasId);
             const iconCtx = iconCanvas.getContext('2d');
@@ -556,57 +827,57 @@
         function renderLobbyIcons() {
             const sword = [
                 '0000000000000000',
-                '0000000000000010',
-                '0000000000000110',
-                '0000000000001100',
-                '0000000000011000',
-                '0000000000110000',
-                '0000000001100000',
-                '0000000011000000',
-                '0000100110000000',
-                '0001111110000000',
-                '0000111100000000',
-                '0000011000000000',
-                '0000111100000000',
-                '0001100110000000',
-                '0011000011000000',
-                '0000000000000000'
+                '0000000100000000',
+                '0000001110000000',
+                '0000001110000000',
+                '0000001110000000',
+                '0000001110000000',
+                '0000001110000000',
+                '0000001110000000',
+                '0000001110000000',
+                '0000001110000000',
+                '0001111111110000',
+                '0000001110000000',
+                '0000000100000000',
+                '0000000100000000',
+                '0000001110000000',
+                '0000000100000000'
             ];
             const heart = [
                 '0000000000000000',
-                '0000110011000000',
-                '0001111111100000',
-                '0011111111110000',
-                '0011111111110000',
-                '0001111111100000',
-                '0000111111000000',
-                '0000011110000000',
-                '0000001100000000',
                 '0000000000000000',
                 '0000000000000000',
-                '0000000000000000',
-                '0000000000000000',
+                '0000011001100000',
+                '0000111111110000',
+                '0001111111111000',
+                '0011111111111100',
+                '0011111111111100',
+                '0001111111111000',
+                '0000111111110000',
+                '0000011111100000',
+                '0000001111000000',
+                '0000000110000000',
                 '0000000000000000',
                 '0000000000000000',
                 '0000000000000000',
             ];
             const shield = [
+                '0000000000000000',
+                '0000001111000000',
+                '0000111111110000',
+                '0001111111111000',
+                '0011111001111100',
+                '0011111001111100',
+                '0011100000011100',
+                '0011100000011100',
+                '0011111001111100',
+                '0001111001111000',
+                '0001111111111000',
+                '0000111111110000',
                 '0000011111100000',
-                '0001111111110000',
-                '0011101101111000',
-                '0011000000111000',
-                '0011100001111000',
-                '0011111111111000',
-                '0001111111110000',
-                '0000111111100000',
-                '0000011111000000',
-                '0000001110000000',
-                '0000001110000000',
-                '0000001110000000',
+                '0000001111000000',
+                '0000000110000000',
                 '0000000000000000',
-                '0000000000000000',
-                '0000000000000000',
-                '0000000000000000'
             ];
 
             drawPixelIcon('iconSword', sword);
@@ -824,7 +1095,7 @@
         }
 
         const state = {
-            mode: 'LOBBY', 
+            mode: 'INTRO', 
             stage: 1,
             gold: 0,
             shake: 0,
@@ -939,6 +1210,13 @@
             getAudioContext();
             const key = e.key;
 
+            if (state.mode === 'INTRO') {
+                if (key === ' ' || key === 'Spacebar' || e.code === 'Space') {
+                    enterLobby();
+                }
+                return;
+            }
+
             if (key === 'Escape' || e.code === 'Escape') {
                 if (state.mode === 'PLAY') {
                     openPauseMenu();
@@ -958,8 +1236,21 @@
                 return;
             }
 
-            // Debug shortcut: jump directly to stage 1-5.
+            // Debug shortcut: jump directly to stage 1-10.
             if (key === 'o' || key === 'O') {
+                if (state.mode === 'PLAY') {
+                    state.stage = 10;
+                    state.nextStageTimer = 0;
+                    resetEnemy();
+                    showMessage(`JUMP TO STAGE ${getStageLabel(10)}`, PALETTE.HIT_GOLD, 90);
+                } else {
+                    startGame(10);
+                }
+                return;
+            }
+
+            // Debug shortcut: jump directly to stage 1-5.
+            if (key === 'i' || key === 'I') {
                 if (state.mode === 'PLAY') {
                     state.stage = 5;
                     state.nextStageTimer = 0;
@@ -973,7 +1264,7 @@
 
             if (state.mode === 'LOBBY') {
                 if (key === 'o' || key === 'O' || e.code === 'KeyO') {
-                    startGame(5);
+                    startGame(10);
                     return;
                 }
                 if (key === '1' || key === 'Numpad1') {
@@ -1089,7 +1380,7 @@
             player.y = player.originY;
             resetEnemy();
             enemy.idleTimer = 1;
-            document.getElementById('main-title').innerText = "TIMING KNIGHT";
+            document.getElementById('main-title').innerText = "TIMING SLIME";
             setSubTitle("PRESS SPACE TO START", true);
             battleScreenEl.style.display = 'block';
             lobbyScreenEl.style.display = 'none';
@@ -1174,6 +1465,18 @@
             introPanelEl.style.display = 'none';
             overlay.style.display = 'none';
             updateLobbyOverlay();
+        }
+
+        function enterIntro() {
+            state.mode = 'INTRO';
+            document.getElementById('main-title').innerText = 'TIMING SLIME';
+            setSubTitle('PRESS SPACE TO START', true);
+            battleScreenEl.style.display = 'block';
+            lobbyScreenEl.style.display = 'none';
+            pausePanelEl.style.display = 'none';
+            introPanelEl.style.display = 'block';
+            overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.72)';
+            overlay.style.display = 'flex';
         }
 
         function openPauseMenu() {
@@ -1382,7 +1685,11 @@
             if (player[levelKey] >= cfg.maxLevel) {
                 state.lobbyNotice = `${cfg.label} upgrade maxed`;
                 showMessage(`${cfg.label} upgrade maxed`, '#f1c40f', 70);
-                if (state.mode === 'LOBBY') updateLobbyOverlay();
+                playInsufficientGoldSfx();
+                if (state.mode === 'LOBBY') {
+                    updateLobbyOverlay();
+                    emphasizeInsufficientGoldNotice();
+                }
                 return;
             }
 
@@ -2035,10 +2342,68 @@
                     drawArrow(arrowX, arrowY, enemy.attackDir, enemy.timer, true);
                 }
             }
-            if (enemy.hitFlash > 0 || (enemy.status === 'HOLD' && Math.floor(Date.now() / 50) % 2 === 0)) ctx.fillStyle = 'white';
-            else ctx.fillStyle = '#c0392b';
+            
+            // 스테이지별로 다른 적 이미지 렌더링
+            let enemyImg = null;
             const enemySize = 80;
-            ctx.fillRect(ex - enemySize / 2, ey - enemySize, enemySize, enemySize);
+            
+            if (state.stage === 1) {
+                enemyImg = stage1MonsterImg;
+            } else if (state.stage === 2) {
+                enemyImg = stage2MonsterImg;
+            } else if (isWorldBossStage()) {
+                // 1-10: 월드 보스 (오른쪽 이미지)
+                enemyImg = bossFinalImg;
+            } else if (isBossStage()) {
+                // 1-5: 중간보스 (왼쪽 이미지)
+                enemyImg = bossMidImg;
+            }
+            
+            // 이미지가 로드되었으면 이미지 렌더링
+            if (enemyImg && enemyImg.complete && enemyImg.naturalWidth > 0) {
+                ctx.save();
+                if (enemy.hitFlash > 0 || (enemy.status === 'HOLD' && Math.floor(Date.now() / 50) % 2 === 0)) {
+                    ctx.globalAlpha = 0.7;
+                    ctx.filter = 'brightness(1.5)';
+                }
+                ctx.imageSmoothingEnabled = false;
+                // 배경이 제거된 캔버스가 있으면 그것을 사용
+                const drawSource = enemyImg.cleanedCanvas || enemyImg;
+
+                // Match boss pixel density to player sprite pixel density.
+                const playerRef = extractedPlayerSprites.idle || extractedPlayerSprites.attack;
+                if (playerRef && drawSource.height > 0) {
+                    const playerBaseHeight = enemySize * 0.72;
+                    const pixelScale = playerBaseHeight / playerRef.height;
+                    let drawHeight = drawSource.height * pixelScale;
+
+                    // Keep stage 1 monster larger, but reduce stage 2 only.
+                    if (state.stage === 1) {
+                        drawHeight = playerBaseHeight * 1.35;
+                    } else if (state.stage === 2) {
+                        drawHeight = playerBaseHeight * 2;
+                    }
+
+                    // Mid boss should appear as large as final boss on screen.
+                    if (!isWorldBossStage() && isBossStage()) {
+                        const finalSource = bossFinalImg.cleanedCanvas || bossFinalImg;
+                        if (finalSource && finalSource.height > 0) {
+                            drawHeight = finalSource.height * pixelScale;
+                        }
+                    }
+
+                    const drawWidth = drawHeight * (drawSource.width / drawSource.height);
+                    ctx.drawImage(drawSource, ex - drawWidth / 2, ey - drawHeight, drawWidth, drawHeight);
+                } else {
+                    ctx.drawImage(drawSource, ex - enemySize / 2, ey - enemySize, enemySize, enemySize);
+                }
+                ctx.restore();
+            } else {
+                // 이미지 로드 실패시 폴백: 사각형 렌더링
+                if (enemy.hitFlash > 0 || (enemy.status === 'HOLD' && Math.floor(Date.now() / 50) % 2 === 0)) ctx.fillStyle = 'white';
+                else ctx.fillStyle = '#c0392b';
+                ctx.fillRect(ex - enemySize / 2, ey - enemySize, enemySize, enemySize);
+            }
         }
 
         function drawBar(x, y, w, h, ratio, color, label) {
@@ -2069,7 +2434,7 @@
 
         window.onload = () => {
             renderLobbyIcons();
-            enterLobby();
+            enterIntro();
         };
     </script>
 </body>
