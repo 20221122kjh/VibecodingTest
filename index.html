@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
@@ -182,6 +182,7 @@
             color: #071004;
             background: #87a06f;
             border: 4px solid #000;
+            overflow: hidden; /* prevent inner highlights from expanding outer border */
             display: flex;
             flex-direction: column;
             gap: 16px;
@@ -209,6 +210,12 @@
             align-items: center;
             gap: 10px;
         }
+        .lobby-card-title {
+            font-size: 12px;
+            color: #071004;
+            margin: 0 0 -2px 0;
+            text-align: center;
+        }
         .icon-frame {
             width: 110px;
             height: 110px;
@@ -219,8 +226,10 @@
             justify-content: center;
         }
         .pixel-icon {
-            width: 76px;
-            height: 76px;
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: contain; /* preserves 1:1 ratio and fits inside the square frame */
             image-rendering: pixelated;
         }
         .upgrade-btn {
@@ -249,7 +258,7 @@
             color: #0f2107;
             text-align: center;
             line-height: 1.4;
-            min-height: 26px;
+            min-height: 28px;
         }
         .lobby-meta {
             border-top: 3px solid #000;
@@ -261,6 +270,37 @@
             text-align: center;
             font-size: 9px;
         }
+        .lobby-card.selected .upgrade-btn {
+            border-color: #ffffff;
+            box-shadow: 0 0 10px rgba(255,255,255,0.45);
+        }
+        .lobby-start {
+            position: relative;
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 0;
+        }
+        .lobby-start.start-selected {
+            /* visual state is drawn by ::after so layout doesn't change */
+            background: rgba(255,255,255,0.04);
+        }
+        /* always draw a black frame around START (absolute so it doesn't affect layout) */
+        .lobby-start::before {
+            content: '';
+            position: absolute;
+            left: -10px;
+            top: -6px;
+            right: -10px;
+            bottom: -6px;
+            border-radius: 0;
+            border: 3px solid #000000;
+            pointer-events: none;
+        }
+        /* when selected, make that frame white */
+        .lobby-start.start-selected::before {
+            border-color: #ffffff;
+        }
+        /* no inner highlight; only the outer frame (::before) changes color on selection */
         .lobby-notice {
             color: #7b1208;
             min-height: 12px;
@@ -280,6 +320,10 @@
             color: #ffffff;
             text-align: center;
             box-sizing: border-box;
+        }
+        .pause-btn.selected {
+            outline: 4px solid #ffffff;
+            box-shadow: 0 0 12px rgba(255,255,255,0.18);
         }
         .pause-title {
             font-size: 16px;
@@ -372,7 +416,6 @@
                         <button id="pauseContinueBtn" class="pause-btn" type="button">CONTINUE</button>
                         <button id="pauseLobbyBtn" class="pause-btn" type="button">RETURN TO LOBBY</button>
                     </div>
-                    <p class="pause-hint">ESC: CONTINUE</p>
                 </div>
             </div>
         </div>
@@ -380,26 +423,29 @@
             <div id="lobbyPanel" class="lobby-panel" aria-live="polite">
                 <div class="lobby-icons">
                     <div class="lobby-card">
-                        <div class="icon-frame"><canvas id="iconSword" class="pixel-icon" width="16" height="16"></canvas></div>
-                        <button id="upgradeAtkBtn" class="upgrade-btn" type="button">[1] ATK UPGRADE</button>
+                        <h3 class="lobby-card-title">ATK</h3>
+                        <div class="icon-frame"><img id="iconSword" class="pixel-icon" src="image/sword.png" alt="sword"></div>
                         <p id="atkCardStat" class="lobby-card-stat">ATK</p>
+                        <button id="upgradeAtkBtn" class="upgrade-btn" type="button">ATK UPGRADE</button>
                     </div>
                     <div class="lobby-card">
-                        <div class="icon-frame"><canvas id="iconHeart" class="pixel-icon" width="16" height="16"></canvas></div>
-                        <button id="upgradeHpBtn" class="upgrade-btn" type="button">[2] HP UPGRADE</button>
+                        <h3 class="lobby-card-title">HP</h3>
+                        <div class="icon-frame"><img id="iconHeart" class="pixel-icon" src="image/heart.png" alt="heart"></div>
                         <p id="hpCardStat" class="lobby-card-stat">HP</p>
+                        <button id="upgradeHpBtn" class="upgrade-btn" type="button">HP UPGRADE</button>
                     </div>
                     <div class="lobby-card">
-                        <div class="icon-frame"><canvas id="iconShield" class="pixel-icon" width="16" height="16"></canvas></div>
-                        <button id="upgradeDefBtn" class="upgrade-btn" type="button">[3] DEF UPGRADE</button>
+                        <h3 class="lobby-card-title">DEF</h3>
+                        <div class="icon-frame"><img id="iconShield" class="pixel-icon" src="image/shield.png" alt="shield"></div>
                         <p id="defCardStat" class="lobby-card-stat">DEF</p>
+                        <button id="upgradeDefBtn" class="upgrade-btn" type="button">DEF UPGRADE</button>
                     </div>
                 </div>
                 <div class="lobby-meta">
                     <p id="lobbyGoldLine">GOLD: 0</p>
                     <p id="lobbyStatLine">HP 100 | ATK 25 | DEF 0</p>
                     <p id="lobbyNoticeLine" class="lobby-notice"></p>
-                    <p>SPACE: START STAGE</p>
+                    <p id="lobbyStart" class="lobby-start">START STAGE</p>
                 </div>
             </div>
         </div>
@@ -425,8 +471,10 @@
         const upgradeHpBtnEl = document.getElementById('upgradeHpBtn');
         const upgradeAtkBtnEl = document.getElementById('upgradeAtkBtn');
         const upgradeDefBtnEl = document.getElementById('upgradeDefBtn');
+        const lobbyStartEl = document.getElementById('lobbyStart');
         const dodgePromptEl = document.getElementById('dodgePrompt');
         const attackPromptEl = document.getElementById('attackPrompt');
+        let pauseSelection = 0; // 0: Continue, 1: Return to Lobby
         const playerSourceImg = new Image();
         playerSourceImg.src = 'image/player_image.png';
         const stage1MonsterImg = new Image();
@@ -437,6 +485,27 @@
         bossMidImg.src = 'image/boss_mid.png';
         const bossFinalImg = new Image();
         bossFinalImg.src = 'image/boss_final.png';
+        // Optional custom small icons (place PNGs in image/ to override pixel patterns)
+        const iconSwordImg = new Image();
+        iconSwordImg.src = 'image/sword.png';
+        const iconHeartImg = new Image();
+        iconHeartImg.src = 'image/heart.png';
+        const iconShieldImg = new Image();
+        iconShieldImg.src = 'image/shield.png';
+        const customIconCanvases = { sword: null, heart: null, shield: null };
+        iconSwordImg.onload = () => { try { customIconCanvases.sword = removeWhiteBackground(iconSwordImg); drawPixelIcon('iconSword'); } catch (e) {} };
+        iconHeartImg.onload = () => { try { customIconCanvases.heart = removeWhiteBackground(iconHeartImg); drawPixelIcon('iconHeart'); } catch (e) {} };
+        iconShieldImg.onload = () => { try { customIconCanvases.shield = removeWhiteBackground(iconShieldImg); drawPixelIcon('iconShield'); } catch (e) {} };
+        // If images are already cached/complete, process immediately
+        if (iconSwordImg.complete && iconSwordImg.naturalWidth > 0) {
+            try { customIconCanvases.sword = removeWhiteBackground(iconSwordImg); drawPixelIcon('iconSword'); } catch (e) {}
+        }
+        if (iconHeartImg.complete && iconHeartImg.naturalWidth > 0) {
+            try { customIconCanvases.heart = removeWhiteBackground(iconHeartImg); drawPixelIcon('iconHeart'); } catch (e) {}
+        }
+        if (iconShieldImg.complete && iconShieldImg.naturalWidth > 0) {
+            try { customIconCanvases.shield = removeWhiteBackground(iconShieldImg); drawPixelIcon('iconShield'); } catch (e) {}
+        }
         const upgradeAudio = new Audio('sound/buy.mp3');
         upgradeAudio.preload = 'auto';
         upgradeAudio.volume = 0.85;
@@ -449,6 +518,7 @@
         let audioCtx = null;
         let lobbyNoticeAnimTimer = null;
         let lobbyStatAnimTimer = null;
+        let lobbySelection = 0; // 0: ATK, 1: HP, 2: DEF, 3: START
         const extractedPlayerSprites = {
             idle: null,
             attack: null
@@ -783,6 +853,35 @@
             image.cleanedCanvas = removeWhiteBackground(image, options);
         }
 
+        function isStatMaxed(index) {
+            if (index === 0) return player.atkLevel >= UPGRADE_CONFIG.atk.maxLevel;
+            if (index === 1) return player.hpLevel >= UPGRADE_CONFIG.hp.maxLevel;
+            if (index === 2) return player.defLevel >= UPGRADE_CONFIG.def.maxLevel;
+            return false;
+        }
+
+        function updateLobbySelection() {
+            try {
+                const cards = document.querySelectorAll('.lobby-card');
+                cards.forEach((c, i) => {
+                    if (i === lobbySelection && lobbySelection <= 2) c.classList.add('selected');
+                    else c.classList.remove('selected');
+                });
+                if (lobbyStartEl) {
+                    if (lobbySelection === 3) lobbyStartEl.classList.add('start-selected');
+                    else lobbyStartEl.classList.remove('start-selected');
+                }
+            } catch (e) {}
+        }
+
+        function updatePauseSelection() {
+            try {
+                if (!pauseContinueBtnEl || !pauseLobbyBtnEl) return;
+                pauseContinueBtnEl.classList.toggle('selected', pauseSelection === 0);
+                pauseLobbyBtnEl.classList.toggle('selected', pauseSelection === 1);
+            } catch (e) {}
+        }
+
         function processStage1MonsterImage(image) {
             image.cleanedCanvas = removeWhiteBackground(image, { aggressive: true });
         }
@@ -810,79 +909,60 @@
         if (bossFinalImg.complete && bossFinalImg.naturalWidth > 0) processBossImage(bossFinalImg, { aggressive: true });
 
         function drawPixelIcon(canvasId, pattern) {
-            const iconCanvas = document.getElementById(canvasId);
-            const iconCtx = iconCanvas.getContext('2d');
-            iconCtx.clearRect(0, 0, 16, 16);
-            iconCtx.fillStyle = '#000000';
-            for (let y = 0; y < pattern.length; y++) {
-                const row = pattern[y];
-                for (let x = 0; x < row.length; x++) {
-                    if (row[x] === '1') {
-                        iconCtx.fillRect(x, y, 1, 1);
+            const el = document.getElementById(canvasId);
+            let key = null;
+            if (canvasId === 'iconSword') key = 'sword';
+            else if (canvasId === 'iconHeart') key = 'heart';
+            else if (canvasId === 'iconShield') key = 'shield';
+
+            // If the element is an <img>, set its src to the processed canvas or original image file.
+            if (el && el.tagName && el.tagName.toLowerCase() === 'img') {
+                try {
+                    if (key && customIconCanvases[key]) {
+                        el.src = customIconCanvases[key].toDataURL();
+                        return;
                     }
+                    // Fallback to original image files
+                    if (key === 'sword') el.src = 'image/sword.png';
+                    else if (key === 'heart') el.src = 'image/heart.png';
+                    else if (key === 'shield') el.src = 'image/shield.png';
+                } catch (e) {
+                    // ignore
+                }
+                return;
+            }
+
+            // Otherwise, if it's a canvas (legacy), draw onto it as before.
+            if (el && typeof el.getContext === 'function') {
+                const iconCanvas = el;
+                const iconCtx = iconCanvas.getContext('2d');
+                iconCtx.clearRect(0, 0, iconCanvas.width, iconCanvas.height);
+                if (key) {
+                    iconCtx.imageSmoothingEnabled = false;
+                    if (customIconCanvases[key]) {
+                        iconCtx.drawImage(customIconCanvases[key], 0, 0, iconCanvas.width, iconCanvas.height);
+                        return;
+                    }
+                    try {
+                        let srcImg = null;
+                        if (key === 'sword' && typeof iconSwordImg !== 'undefined') srcImg = iconSwordImg;
+                        else if (key === 'heart' && typeof iconHeartImg !== 'undefined') srcImg = iconHeartImg;
+                        else if (key === 'shield' && typeof iconShieldImg !== 'undefined') srcImg = iconShieldImg;
+
+                        if (srcImg && srcImg.complete && srcImg.naturalWidth > 0) {
+                            iconCtx.drawImage(srcImg, 0, 0, iconCanvas.width, iconCanvas.height);
+                            return;
+                        }
+                    } catch (e) {}
                 }
             }
         }
 
         function renderLobbyIcons() {
-            const sword = [
-                '0000000000000000',
-                '0000000100000000',
-                '0000001110000000',
-                '0000001110000000',
-                '0000001110000000',
-                '0000001110000000',
-                '0000001110000000',
-                '0000001110000000',
-                '0000001110000000',
-                '0000001110000000',
-                '0001111111110000',
-                '0000001110000000',
-                '0000000100000000',
-                '0000000100000000',
-                '0000001110000000',
-                '0000000100000000'
-            ];
-            const heart = [
-                '0000000000000000',
-                '0000000000000000',
-                '0000000000000000',
-                '0000011001100000',
-                '0000111111110000',
-                '0001111111111000',
-                '0011111111111100',
-                '0011111111111100',
-                '0001111111111000',
-                '0000111111110000',
-                '0000011111100000',
-                '0000001111000000',
-                '0000000110000000',
-                '0000000000000000',
-                '0000000000000000',
-                '0000000000000000',
-            ];
-            const shield = [
-                '0000000000000000',
-                '0000001111000000',
-                '0000111111110000',
-                '0001111111111000',
-                '0011111001111100',
-                '0011111001111100',
-                '0011100000011100',
-                '0011100000011100',
-                '0011111001111100',
-                '0001111001111000',
-                '0001111111111000',
-                '0000111111110000',
-                '0000011111100000',
-                '0000001111000000',
-                '0000000110000000',
-                '0000000000000000',
-            ];
-
-            drawPixelIcon('iconSword', sword);
-            drawPixelIcon('iconHeart', heart);
-            drawPixelIcon('iconShield', shield);
+            // Use uploaded/processed images for the three lobby icons.
+            drawPixelIcon('iconSword', null);
+            drawPixelIcon('iconHeart', null);
+            drawPixelIcon('iconShield', null);
         }
 
         function getAudioContext() {
@@ -1263,23 +1343,84 @@
             }
 
             if (state.mode === 'LOBBY') {
-                if (key === 'o' || key === 'O' || e.code === 'KeyO') {
-                    startGame(10);
+                // Keyboard navigation for lobby: ArrowLeft/Right to move between upgrades,
+                // ArrowDown to go to START, ArrowUp to go back to cards. Space to select.
+                const k = (e.key || '').toString().toLowerCase();
+                const navLeft = (k === 'arrowleft' || k === 'left' || (e.code || '').toString().toLowerCase() === 'arrowleft' || e.keyCode === 37);
+                const navRight = (k === 'arrowright' || k === 'right' || (e.code || '').toString().toLowerCase() === 'arrowright' || e.keyCode === 39);
+                const navUp = (key === 'ArrowUp' || e.code === 'ArrowUp');
+                const navDown = (key === 'ArrowDown' || e.code === 'ArrowDown');
+
+                if (navLeft) {
+                    if (lobbySelection === 3) {
+                        if (!isStatMaxed(2)) lobbySelection = 2;
+                        else if (!isStatMaxed(1)) lobbySelection = 1;
+                        else if (!isStatMaxed(0)) lobbySelection = 0;
+                    } else {
+                        let nextSel = lobbySelection;
+                        for (let i = 0; i < 3; i++) {
+                            nextSel = (nextSel + 2) % 3;
+                            if (!isStatMaxed(nextSel)) {
+                                lobbySelection = nextSel;
+                                break;
+                            }
+                        }
+                        if (isStatMaxed(lobbySelection)) lobbySelection = 3;
+                    }
+                    updateLobbySelection();
                     return;
                 }
-                if (key === '1' || key === 'Numpad1') {
-                    tryUpgrade('atk');
+                if (navRight) {
+                    if (lobbySelection === 3) {
+                        if (!isStatMaxed(0)) lobbySelection = 0;
+                        else if (!isStatMaxed(1)) lobbySelection = 1;
+                        else if (!isStatMaxed(2)) lobbySelection = 2;
+                    } else {
+                        let nextSel = lobbySelection;
+                        for (let i = 0; i < 3; i++) {
+                            nextSel = (nextSel + 1) % 3;
+                            if (!isStatMaxed(nextSel)) {
+                                lobbySelection = nextSel;
+                                break;
+                            }
+                        }
+                        if (isStatMaxed(lobbySelection)) lobbySelection = 3;
+                    }
+                    updateLobbySelection();
                     return;
                 }
-                if (key === '2' || key === 'Numpad2') {
-                    tryUpgrade('hp');
+                if (navDown) {
+                    lobbySelection = 3;
+                    updateLobbySelection();
                     return;
                 }
-                if (key === '3' || key === 'Numpad3') {
-                    tryUpgrade('def');
+                if (navUp) {
+                    if (lobbySelection === 3) {
+                        if (!isStatMaxed(1)) lobbySelection = 1;
+                        else if (!isStatMaxed(0)) lobbySelection = 0;
+                        else if (!isStatMaxed(2)) lobbySelection = 2;
+                        updateLobbySelection();
+                    }
                     return;
                 }
-                if (key === ' ' || key === 'Spacebar' || e.code === 'Space') startGame();
+
+                // Number shortcuts removed: 1/2/3 no longer trigger upgrades.
+
+                // Quick start
+                if (key === 'o' || key === 'O' || e.code === 'KeyO') { startGame(10); return; }
+
+                if (key === ' ' || key === 'Spacebar' || e.code === 'Space') {
+                    // If on START, start the game. If on a stat card, activate that upgrade.
+                    if (lobbySelection === 3) {
+                        startGame();
+                    } else {
+                        if (lobbySelection === 0) tryUpgrade('atk');
+                        else if (lobbySelection === 1) tryUpgrade('hp');
+                        else if (lobbySelection === 2) tryUpgrade('def');
+                        updateLobbySelection();
+                    }
+                    return;
+                }
                 return;
             }
             if (state.mode === 'GAMEOVER' || state.mode === 'CLEAR') {
@@ -1287,6 +1428,20 @@
                 return;
             }
             if (state.mode === 'PAUSED') {
+                const navUp = (key === 'ArrowUp' || e.code === 'ArrowUp');
+                const navDown = (key === 'ArrowDown' || e.code === 'ArrowDown');
+
+                if (navUp || navDown) {
+                    pauseSelection = pauseSelection === 0 ? 1 : 0;
+                    updatePauseSelection();
+                    return;
+                }
+
+                if (key === ' ' || key === 'Spacebar' || e.code === 'Space' || key === 'Enter' || e.code === 'Enter') {
+                    if (pauseSelection === 0) resumeFromPause();
+                    else returnToLobbyFromPause();
+                    return;
+                }
                 return;
             }
             if (state.mode === 'PLAY') {
@@ -1441,9 +1596,13 @@
             lobbyStatLineEl.innerText = `HP ${player.maxHp} | ATK ${player.atk} | DEF ${player.def}`;
             lobbyNoticeLineEl.innerText = state.lobbyNotice;
 
-            hpCardStatEl.innerText = `HP LV ${player.hpLevel} | +${UPGRADE_CONFIG.hp.amount} | ${hpCost}`;
-            atkCardStatEl.innerText = `ATK LV ${player.atkLevel} | +${UPGRADE_CONFIG.atk.amount} | ${atkCost}`;
-            defCardStatEl.innerText = `DEF LV ${player.defLevel} | +${UPGRADE_CONFIG.def.amount} | ${defCost}`;
+            hpCardStatEl.innerHTML = `LV ${player.hpLevel}<br><span style="color:#2b3d1f; font-size: 7px;">(+${UPGRADE_CONFIG.hp.amount} HP)</span>`;
+            atkCardStatEl.innerHTML = `LV ${player.atkLevel}<br><span style="color:#2b3d1f; font-size: 7px;">(+${UPGRADE_CONFIG.atk.amount} ATK)</span>`;
+            defCardStatEl.innerHTML = `LV ${player.defLevel}<br><span style="color:#2b3d1f; font-size: 7px;">(+${UPGRADE_CONFIG.def.amount} DEF)</span>`;
+
+            upgradeHpBtnEl.innerText = player.hpLevel >= UPGRADE_CONFIG.hp.maxLevel ? 'MAX LEVEL' : `UPGRADE [${hpCost}]`;
+            upgradeAtkBtnEl.innerText = player.atkLevel >= UPGRADE_CONFIG.atk.maxLevel ? 'MAX LEVEL' : `UPGRADE [${atkCost}]`;
+            upgradeDefBtnEl.innerText = player.defLevel >= UPGRADE_CONFIG.def.maxLevel ? 'MAX LEVEL' : `UPGRADE [${defCost}]`;
 
             upgradeHpBtnEl.disabled = player.hpLevel >= UPGRADE_CONFIG.hp.maxLevel;
             upgradeAtkBtnEl.disabled = player.atkLevel >= UPGRADE_CONFIG.atk.maxLevel;
@@ -1465,6 +1624,17 @@
             introPanelEl.style.display = 'none';
             overlay.style.display = 'none';
             updateLobbyOverlay();
+            // Initialize selection and ensure lobby icons are redrawn using uploaded images when entering lobby
+            try { 
+                lobbySelection = 0; 
+                if (isStatMaxed(0)) {
+                    if (!isStatMaxed(1)) lobbySelection = 1;
+                    else if (!isStatMaxed(2)) lobbySelection = 2;
+                    else lobbySelection = 3;
+                }
+                updateLobbySelection(); 
+                renderLobbyIcons(); 
+            } catch (e) {}
         }
 
         function enterIntro() {
@@ -1488,6 +1658,9 @@
             pausePanelEl.style.display = 'block';
             overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.58)';
             overlay.style.display = 'flex';
+            // initialize pause selection
+            pauseSelection = 0;
+            try { updatePauseSelection(); } catch (e) {}
         }
 
         function resumeFromPause() {
@@ -1720,6 +1893,21 @@
 
             state.lobbyNotice = '';
             if (state.mode === 'LOBBY') {
+                if (player[levelKey] >= cfg.maxLevel) {
+                    let maxedIndex = (type === 'atk') ? 0 : (type === 'hp') ? 1 : 2;
+                    if (lobbySelection === maxedIndex) {
+                        let nextSel = lobbySelection;
+                        for (let i = 0; i < 3; i++) {
+                            nextSel = (nextSel + 1) % 3;
+                            if (!isStatMaxed(nextSel)) {
+                                lobbySelection = nextSel;
+                                break;
+                            }
+                        }
+                        if (isStatMaxed(lobbySelection)) lobbySelection = 3;
+                        updateLobbySelection();
+                    }
+                }
                 updateLobbyOverlay();
                 emphasizeUpgradedStat(type);
             }
@@ -1974,22 +2162,15 @@
                         const wave = Math.sin(progress * Math.PI * 2 * enemy.waveCycles) * 34;
                         enemy.y = enemy.originY + wave;
                     } else if (enemy.attackDir === 'AIR_ORBIT_SWEEP') {
-                        // 첫 번째 단계 (0~0.5): 곡선을 따라 상단으로 올라감
-                        if (progress < 0.5) {
-                            const phaseProgress = progress * 2; // 0 ~ 1
-                            // 부드러운 곡선으로 우상향 이동
-                            const curveY = -Math.sin(phaseProgress * Math.PI) * 120;
-                            const curveX = enemy.originX + phaseProgress * 90;
-                            enemy.x = curveX;
-                            enemy.y = enemy.originY + curveY;
-                        } else {
-                            // 두 번째 단계 (0.5~1.0): 최고점에서 아래로 하강
-                            const peakX = enemy.originX + 90;
-                            const peakY = enemy.originY - 120;
-                            const phaseProgress = (progress - 0.5) * 2; // 0 ~ 1
-                            enemy.x = peakX;
-                            enemy.y = peakY + phaseProgress * 120;
-                        }
+                        // Smooth orbital prep: ease-in-out horizontal travel with sinusoidal vertical arc
+                        // progress: 0..1
+                        const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI); // easeInOut
+                        const arcRadiusX = 90;
+                        const arcRadiusY = 120;
+
+                        // Move smoothly to the right while tracing an arc up-and-down
+                        enemy.x = enemy.originX + eased * arcRadiusX;
+                        enemy.y = enemy.originY - Math.sin(eased * Math.PI) * arcRadiusY;
                     } else {
                         enemy.x = enemy.originX + (enemy.prepX - enemy.originX) * progress;
                         enemy.y = enemy.originY + (enemy.prepY - enemy.originY) * progress;
